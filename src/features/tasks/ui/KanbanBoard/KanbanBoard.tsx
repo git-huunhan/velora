@@ -36,9 +36,9 @@ import {
   useDeleteTask,
   useTasksByProject,
   useUpdateTask,
-  useUpdateTaskStatus,
 } from "@/features/tasks";
 import type { Task, TaskStatus, TaskUpdateData } from "../../model/types";
+import { calculateTaskOrder } from "../../model/taskOrder";
 import { filterTasks, mergeServerTasks } from "../../model/taskViewUtils";
 import { BoardColumn } from "../BoardColumn/BoardColumn";
 import { TaskCard } from "../TaskCard/TaskCard";
@@ -49,6 +49,15 @@ import type { TaskFormData } from "../TaskFormModal/TaskFormModal";
 type GroupBy = "None" | "Assignee" | "Epic" | "Subtask";
 
 const EMPTY_TASKS: Task[] = [];
+
+function isTaskInSameLane(task: Task, target: Task, groupBy: GroupBy) {
+  if (task.status !== target.status || task.type === "epic") return false;
+  if (groupBy === "Assignee") return task.assigneeId === target.assigneeId;
+  if (groupBy === "Epic" || groupBy === "Subtask") {
+    return task.parentId === target.parentId;
+  }
+  return true;
+}
 
 interface KanbanBoardProps {
   projectId: string;
@@ -215,7 +224,6 @@ export function KanbanBoard({
     }
   }, [localTasks, selectedTask]);
 
-  const updateStatus = useUpdateTaskStatus();
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
   const deleteTask = useDeleteTask();
@@ -436,13 +444,11 @@ export function KanbanBoard({
     const updatedTask = localTasks.find((t) => t.id === activeIdStr);
     if (updatedTask) {
       const originalTask = serverTasks.find((t) => t.id === activeIdStr);
-      let statusChanged = false;
-      let dataChanged = false;
       const dataToUpdate: TaskUpdateData = {};
 
       if (originalTask) {
         if (originalTask.status !== updatedTask.status) {
-          statusChanged = true;
+          dataToUpdate.status = updatedTask.status;
         }
         if (
           groupBy === "Assignee" &&
@@ -452,30 +458,45 @@ export function KanbanBoard({
             updatedTask.assigneeId === undefined
               ? null
               : updatedTask.assigneeId;
-          dataChanged = true;
         } else if (
           (groupBy === "Epic" || groupBy === "Subtask") &&
           originalTask.parentId !== updatedTask.parentId
         ) {
           dataToUpdate.parentId =
             updatedTask.parentId === undefined ? null : updatedTask.parentId;
-          dataChanged = true;
         }
-      }
 
-      if (dataChanged) {
-        if (statusChanged) {
-          dataToUpdate.status = updatedTask.status;
+        const laneTasks = localTasks.filter((task) =>
+          isTaskInSameLane(task, updatedTask, groupBy),
+        );
+        const movedIndex = laneTasks.findIndex(
+          (task) => task.id === updatedTask.id,
+        );
+        const nextOrder = calculateTaskOrder(
+          laneTasks[movedIndex - 1]?.order,
+          laneTasks[movedIndex + 1]?.order,
+        );
+
+        if (nextOrder !== originalTask.order) {
+          dataToUpdate.order = nextOrder;
         }
-        updateTask.mutate({
-          taskId: updatedTask.id,
-          data: dataToUpdate,
-        });
-      } else if (statusChanged) {
-        updateStatus.mutate({
-          taskId: updatedTask.id,
-          status: updatedTask.status,
-        });
+
+        if (Object.keys(dataToUpdate).length > 0) {
+          setLocalTasks((tasks) =>
+            tasks.map((task) =>
+              task.id === updatedTask.id ? { ...task, order: nextOrder } : task,
+            ),
+          );
+          updateTask.mutate(
+            { taskId: updatedTask.id, data: dataToUpdate },
+            {
+              onError: () => {
+                setLocalTasks(previousLocalTasksRef.current);
+                toast.error("Failed to save task position");
+              },
+            },
+          );
+        }
       }
     }
   };
@@ -566,7 +587,7 @@ export function KanbanBoard({
     return (
       <div className="flex flex-col h-full overflow-hidden pt-0">
         {headerSlot}
-        <div className="flex flex-col flex-1 overflow-auto px-6 md:px-8 pb-4 items-start">
+        <div className="flex flex-col flex-1 overflow-auto px-6 pt-4 md:px-8 pb-4 items-start">
           <div className="flex gap-4 h-fit max-h-full min-h-0 animate-pulse">
             {[1, 2, 3, 4].map((i) => (
               <div
@@ -591,7 +612,7 @@ export function KanbanBoard({
         onDragEnd={onDragEnd}
       >
         <div
-          className="flex flex-col flex-1 min-h-0 overflow-x-auto overflow-y-auto px-6 pb-6 md:px-8 md:pb-8 items-start relative custom-scrollbar"
+          className="flex flex-col flex-1 min-h-0 overflow-x-auto overflow-y-auto px-6 pt-4 pb-6 md:px-8 md:pb-8 items-start relative custom-scrollbar"
           ref={scrollContainerRef}
         >
           {groupBy !== "None" ? (

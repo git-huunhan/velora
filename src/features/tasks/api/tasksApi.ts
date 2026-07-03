@@ -1,6 +1,11 @@
 import { getProjectKeySync } from "../../projects/api/projectsApi";
 import { mockUsers } from "../../users/model/mockUsers";
 import type { Task, TaskStatus, TaskUpdateData } from "../model/types";
+import {
+  calculateTaskOrder,
+  compareTaskOrder,
+  TASK_ORDER_GAP,
+} from "../model/taskOrder";
 import { logActivity } from "./commentsApi";
 
 const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
@@ -33,6 +38,7 @@ let tasksDb: Task[] = Array.from({ length: 60 }).map((_, i) => {
     type: i === 1 || i === 5 ? "epic" : i % 4 === 0 ? "bug" : "task",
     status: STATUSES[i % 4],
     priority: PRIORITIES[i % 3],
+    order: (Math.floor(i / 24) + 1) * TASK_ORDER_GAP,
     assigneeId,
     assignee: user
       ? { id: user.id, name: user.name, avatarUrl: user.avatarUrl || "" }
@@ -46,7 +52,9 @@ let tasksDb: Task[] = Array.from({ length: 60 }).map((_, i) => {
 
 export async function getTasksByProjectId(projectId: string): Promise<Task[]> {
   await delay(500);
-  return tasksDb.filter((t) => t.projectId === projectId);
+  return tasksDb
+    .filter((t) => t.projectId === projectId)
+    .sort(compareTaskOrder);
 }
 
 export async function updateTaskStatus(
@@ -80,8 +88,9 @@ export async function updateTaskStatus(
 }
 
 export async function createTask(
-  data: Omit<Task, "id" | "createdAt" | "code" | "assignee"> & {
+  data: Omit<Task, "id" | "createdAt" | "code" | "assignee" | "order"> & {
     afterTaskId?: string;
+    order?: number;
   },
 ): Promise<Task> {
   await delay(500);
@@ -89,6 +98,37 @@ export async function createTask(
   const assignedUser = taskData.assigneeId
     ? mockUsers.find((u) => u.id === taskData.assigneeId)
     : undefined;
+
+  const lastOrder = tasksDb
+    .filter(
+      (task) =>
+        task.projectId === taskData.projectId &&
+        task.status === taskData.status,
+    )
+    .reduce((maximum, task) => Math.max(maximum, task.order), 0);
+  const afterTask = afterTaskId
+    ? tasksDb.find((task) => task.id === afterTaskId)
+    : undefined;
+  const orderedLaneTasks = afterTask
+    ? tasksDb
+        .filter(
+          (task) =>
+            task.projectId === afterTask.projectId &&
+            task.status === afterTask.status,
+        )
+        .sort(compareTaskOrder)
+    : [];
+  const afterTaskIndex = afterTask
+    ? orderedLaneTasks.findIndex((task) => task.id === afterTask.id)
+    : -1;
+  const resolvedOrder =
+    taskData.order ??
+    (afterTask
+      ? calculateTaskOrder(
+          afterTask.order,
+          orderedLaneTasks[afterTaskIndex + 1]?.order,
+        )
+      : lastOrder + TASK_ORDER_GAP);
 
   const newTask: Task = {
     ...taskData,
@@ -102,6 +142,7 @@ export async function createTask(
         }
       : undefined,
     reporterId: "user-1",
+    order: resolvedOrder,
     reporter: mockUsers[0]
       ? {
           id: mockUsers[0].id,

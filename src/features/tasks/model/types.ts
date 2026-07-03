@@ -10,6 +10,7 @@ export interface Task {
   type?: "task" | "epic" | "bug";
   status: TaskStatus;
   priority: TaskPriority;
+  order: number;
   assignee?: {
     id: string;
     name: string;

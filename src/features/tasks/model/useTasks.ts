@@ -89,6 +89,7 @@ export function useCreateTask() {
         status: newTaskData.status,
         type: newTaskData.type || "task",
         priority: newTaskData.priority || "medium",
+        order: newTaskData.order ?? Number.MAX_SAFE_INTEGER,
         assigneeId: newTaskData.assigneeId || undefined,
         reporterId: "user-1",
         dueDate: newTaskData.dueDate || undefined,
