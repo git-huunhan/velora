@@ -20,6 +20,7 @@ import {
   ChevronRight,
   ClipboardList,
   Crown,
+  Plus,
   User as UserIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -33,8 +34,13 @@ import { mockUsers } from "@/features/users/model/mockUsers";
 import {
   KANBAN_COLUMNS,
   useCreateTask,
+  useCreateColumn,
+  useDeleteColumn,
   useDeleteTask,
+  useProjectColumns,
+  useReorderColumns,
   useTasksByProject,
+  useUpdateColumn,
   useUpdateTask,
 } from "@/features/tasks";
 import type { Task, TaskStatus, TaskUpdateData } from "../../model/types";
@@ -187,8 +193,22 @@ export function KanbanBoard({
   headerSlot,
 }: KanbanBoardProps) {
   const { data: serverTaskData, isLoading } = useTasksByProject(projectId);
+  const { data: columns = [] } = useProjectColumns(projectId);
+  const createColumn = useCreateColumn(projectId);
+  const updateColumn = useUpdateColumn(projectId);
+  const deleteColumn = useDeleteColumn(projectId);
+  const reorderColumns = useReorderColumns(projectId);
   const serverTasks = serverTaskData ?? EMPTY_TASKS;
   const [localTasks, setLocalTasks] = useState<Task[]>([]);
+  const [isAddingColumn, setIsAddingColumn] = useState(false);
+  const [newColumnTitle, setNewColumnTitle] = useState("");
+  const [draggedColumnId, setDraggedColumnId] = useState<TaskStatus | null>(
+    null,
+  );
+  const [columnDropIndicator, setColumnDropIndicator] = useState<{
+    columnId: TaskStatus;
+    side: "before" | "after";
+  } | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const isDraggingRef = useRef(false); // ref syncs synchronously, unlike state
   const initializedProjectIdRef = useRef<string | null>(null);
@@ -239,6 +259,43 @@ export function KanbanBoard({
     grouped: [],
     hasUngrouped: false,
   });
+
+  useEffect(() => {
+    if (!draggedColumnId) return;
+
+    const edgeSize = 96;
+    const maxSpeed = 24;
+
+    const handleColumnDragOver = (event: DragEvent) => {
+      const scrollContainer = scrollContainerRef.current;
+      if (!scrollContainer) return;
+
+      event.preventDefault();
+      event.dataTransfer!.dropEffect = "move";
+
+      const rect = scrollContainer.getBoundingClientRect();
+      const leftDistance = event.clientX - rect.left;
+      const rightDistance = rect.right - event.clientX;
+      let scrollDelta = 0;
+
+      if (leftDistance < edgeSize) {
+        scrollDelta = -Math.ceil(
+          ((edgeSize - Math.max(leftDistance, 0)) / edgeSize) * maxSpeed,
+        );
+      } else if (rightDistance < edgeSize) {
+        scrollDelta = Math.ceil(
+          ((edgeSize - Math.max(rightDistance, 0)) / edgeSize) * maxSpeed,
+        );
+      }
+
+      if (scrollDelta !== 0) {
+        scrollContainer.scrollLeft += scrollDelta;
+      }
+    };
+
+    window.addEventListener("dragover", handleColumnDragOver);
+    return () => window.removeEventListener("dragover", handleColumnDragOver);
+  }, [draggedColumnId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -526,6 +583,103 @@ export function KanbanBoard({
     );
   };
 
+  const handleAddColumn = async () => {
+    const title = newColumnTitle.trim();
+    if (!title) return;
+    try {
+      await createColumn.mutateAsync(title);
+      setNewColumnTitle("");
+      setIsAddingColumn(false);
+      toast.success("Column added");
+    } catch {
+      toast.error("Failed to add column");
+    }
+  };
+
+  const getColumnManagementProps = (column: (typeof columns)[number]) => ({
+    column,
+    columns,
+    onRenameColumn: (title: string) =>
+      updateColumn.mutate({ columnId: column.id, data: { title } }),
+    onSetDoneColumn: () =>
+      updateColumn.mutate({ columnId: column.id, data: { isDone: true } }),
+    onDeleteColumn: async (targetColumnId?: string) => {
+      if (targetColumnId) {
+        const tasksToMove = localTasks.filter(
+          (task) => task.status === column.id,
+        );
+        await Promise.all(
+          tasksToMove.map((task) =>
+            updateTask.mutateAsync({
+              taskId: task.id,
+              data: { status: targetColumnId as TaskStatus },
+            }),
+          ),
+        );
+        setLocalTasks((tasks) =>
+          tasks.map((task) =>
+            task.status === column.id
+              ? { ...task, status: targetColumnId as TaskStatus }
+              : task,
+          ),
+        );
+      }
+      await deleteColumn.mutateAsync(column.id);
+      toast.success("Column deleted");
+    },
+    onColumnDragStart: () => setDraggedColumnId(column.id),
+    isColumnDragging: draggedColumnId !== null,
+    onColumnDragEnd: () => {
+      setDraggedColumnId(null);
+      setColumnDropIndicator(null);
+    },
+    onColumnDragOver: (side: "before" | "after") => {
+      if (!draggedColumnId) return;
+      const sourceIndex = columns.findIndex(
+        (item) => item.id === draggedColumnId,
+      );
+      const targetIndex = columns.findIndex((item) => item.id === column.id);
+      const insertionIndex = side === "after" ? targetIndex + 1 : targetIndex;
+      if (
+        insertionIndex === sourceIndex ||
+        insertionIndex === sourceIndex + 1
+      ) {
+        setColumnDropIndicator(null);
+        return;
+      }
+      setColumnDropIndicator({ columnId: column.id, side });
+    },
+    dropIndicatorSide:
+      columnDropIndicator?.columnId === column.id
+        ? columnDropIndicator.side
+        : null,
+    onColumnDrop: (side: "before" | "after") => {
+      if (!draggedColumnId) return;
+      const ids = columns.map((item) => item.id);
+      const from = ids.indexOf(draggedColumnId);
+      const originalTargetIndex = ids.indexOf(column.id);
+      const originalInsertionIndex =
+        side === "after" ? originalTargetIndex + 1 : originalTargetIndex;
+      if (
+        originalInsertionIndex === from ||
+        originalInsertionIndex === from + 1
+      ) {
+        setColumnDropIndicator(null);
+        return;
+      }
+      const [movedColumnId] = ids.splice(from, 1);
+      if (!movedColumnId) return;
+      const targetIndex = ids.indexOf(column.id);
+      const insertionIndex = side === "after" ? targetIndex + 1 : targetIndex;
+      ids.splice(insertionIndex, 0, movedColumnId);
+      reorderColumns.mutate(ids, {
+        onError: () => toast.error("Failed to reorder columns"),
+      });
+      setDraggedColumnId(null);
+      setColumnDropIndicator(null);
+    },
+  });
+
   const handleEdit = (data: TaskFormData) => {
     if (!editingTask) return;
     updateTask.mutate(
@@ -678,12 +832,13 @@ export function KanbanBoard({
                             avatar={user?.avatarUrl}
                             taskCount={tasks.length}
                           >
-                            {KANBAN_COLUMNS.map((col, index) => {
+                            {columns.map((col, index) => {
                               const columnTasks = tasks.filter(
                                 (t) => t.status === col.id,
                               );
                               return (
                                 <BoardColumn
+                                  {...getColumnManagementProps(col)}
                                   key={`${col.id}___${groupId}`}
                                   columnId={col.id}
                                   droppableId={`${col.id}___${groupId}`}
@@ -713,12 +868,13 @@ export function KanbanBoard({
                           parentTask={parentTask}
                           taskCount={tasks.length}
                         >
-                          {KANBAN_COLUMNS.map((col, index) => {
+                          {columns.map((col, index) => {
                             const columnTasks = tasks.filter(
                               (t) => t.status === col.id,
                             );
                             return (
                               <BoardColumn
+                                {...getColumnManagementProps(col)}
                                 key={`${col.id}___${groupId}`}
                                 columnId={col.id}
                                 droppableId={`${col.id}___${groupId}`}
@@ -744,12 +900,13 @@ export function KanbanBoard({
                         taskCount={ungrouped.length}
                         isFallbackGroup={true}
                       >
-                        {KANBAN_COLUMNS.map((col, index) => {
+                        {columns.map((col, index) => {
                           const columnTasks = ungrouped.filter(
                             (t) => t.status === col.id,
                           );
                           return (
                             <BoardColumn
+                              {...getColumnManagementProps(col)}
                               key={`${col.id}___ungrouped`}
                               columnId={col.id}
                               droppableId={`${col.id}___ungrouped`}
@@ -772,12 +929,13 @@ export function KanbanBoard({
             </div>
           ) : (
             <div className="flex h-fit max-h-full min-h-0">
-              {KANBAN_COLUMNS.map((col, index) => {
+              {columns.map((col, index) => {
                 const columnTasks = filteredTasks.filter(
                   (t) => t.status === col.id,
                 );
                 return (
                   <BoardColumn
+                    {...getColumnManagementProps(col)}
                     key={col.id}
                     columnId={col.id}
                     droppableId={col.id}
@@ -791,6 +949,35 @@ export function KanbanBoard({
                   />
                 );
               })}
+              <div className="w-70 shrink-0 pr-6">
+                {isAddingColumn ? (
+                  <input
+                    autoFocus
+                    value={newColumnTitle}
+                    onChange={(event) => setNewColumnTitle(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void handleAddColumn();
+                      if (event.key === "Escape") {
+                        setNewColumnTitle("");
+                        setIsAddingColumn(false);
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!newColumnTitle.trim()) setIsAddingColumn(false);
+                    }}
+                    placeholder="Column name"
+                    className="h-10 w-full rounded-lg border border-primary bg-muted/50 px-3 text-sm font-medium outline-none ring-2 ring-primary/20 placeholder:text-muted-foreground"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingColumn(true)}
+                    className="flex h-10 w-full items-center gap-2 rounded-lg border border-dashed px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <Plus className="h-4 w-4" /> Add column
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

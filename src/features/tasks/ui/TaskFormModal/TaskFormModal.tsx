@@ -25,7 +25,10 @@ import type { Task, TaskPriority, TaskStatus } from "../../model/types";
 const schema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters"),
   description: z.string().optional(),
-  status: z.enum(["todo", "in-progress", "review", "done"]),
+  status: z.custom<TaskStatus>(
+    (value) => typeof value === "string" && value.length > 0,
+    "Status is required",
+  ),
   priority: z.enum(["low", "medium", "high"]),
   assigneeId: z.string().optional(),
 });

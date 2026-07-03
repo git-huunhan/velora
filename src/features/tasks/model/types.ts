@@ -1,4 +1,9 @@
-export type TaskStatus = "todo" | "in-progress" | "review" | "done";
+export type TaskStatus =
+  | "todo"
+  | "in-progress"
+  | "review"
+  | "done"
+  | `custom-${string}`;
 export type TaskPriority = "low" | "medium" | "high";
 
 export interface Task {
@@ -57,13 +62,15 @@ export type TaskFieldUpdater = <Field extends keyof TaskUpdateData>(
 export interface KanbanColumn {
   id: TaskStatus;
   title: string;
+  order: number;
+  isDone: boolean;
 }
 
 export const KANBAN_COLUMNS: KanbanColumn[] = [
-  { id: "todo", title: "To Do" },
-  { id: "in-progress", title: "In Progress" },
-  { id: "review", title: "Review" },
-  { id: "done", title: "Done" },
+  { id: "todo", title: "To Do", order: 0, isDone: false },
+  { id: "in-progress", title: "In Progress", order: 1, isDone: false },
+  { id: "review", title: "Review", order: 2, isDone: false },
+  { id: "done", title: "Done", order: 3, isDone: true },
 ];
 
 export interface Comment {
