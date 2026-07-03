@@ -1,0 +1,94 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ProjectRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum TaskType {
+  EPIC
+  TASK
+  BUG
+  SUBTASK
+}
+
+model User {
+  id          String          @id @default(uuid()) @db.Uuid
+  email       String          @unique
+  displayName String
+  avatarUrl   String?
+  memberships ProjectMember[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+model Project {
+  id        String          @id @default(uuid()) @db.Uuid
+  key       String          @unique
+  name      String
+  members   ProjectMember[]
+  columns   KanbanColumn[]
+  tasks     Task[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model ProjectMember {
+  projectId String      @db.Uuid
+  userId    String      @db.Uuid
+  role      ProjectRole @default(MEMBER)
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@id([projectId, userId])
+  @@index([userId])
+}
+
+model KanbanColumn {
+  id        String   @id @default(uuid()) @db.Uuid
+  projectId String   @db.Uuid
+  name      String
+  rank      String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, name])
+  @@unique([projectId, rank])
+  @@index([projectId])
+}
+
+model Task {
+  id        String       @id @default(uuid()) @db.Uuid
+  projectId String       @db.Uuid
+  columnId  String       @db.Uuid
+  parentId  String?      @db.Uuid
+  code      String
+  title     String
+  type      TaskType     @default(TASK)
+  rank      String
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  column    KanbanColumn @relation(fields: [columnId], references: [id], onDelete: Restrict)
+  parent    Task?        @relation("TaskHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children  Task[]       @relation("TaskHierarchy")
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([projectId, code])
+  @@unique([columnId, rank])
+  @@index([projectId])
+  @@index([parentId])
+}

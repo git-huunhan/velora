@@ -3,10 +3,25 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "dev:api": "npm run start:dev --workspace @velora/api",
+    "build": "npm run build:web && npm run build:api",
+    "build:web": "tsc -b && vite build",
+    "build:api": "npm run build --workspace @velora/api",
+    "lint": "npm run lint:web && npm run lint:api",
+    "lint:web": "eslint .",
+    "lint:api": "npm run lint --workspace @velora/api",
+    "test:api": "npm run test --workspace @velora/api",
+    "test:api:e2e": "npm run test:e2e --workspace @velora/api",
+    "db:generate": "npm run db:generate --workspace @velora/api",
+    "db:migrate": "npm run db:migrate --workspace @velora/api",
+    "db:seed": "npm run db:seed --workspace @velora/api",
+    "db:studio": "npm run db:studio --workspace @velora/api",
     "preview": "vite preview"
   },
   "dependencies": {
