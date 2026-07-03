@@ -535,6 +535,15 @@ export function KanbanBoard({
     );
   };
 
+  const handleCardUpdate = (taskId: string, data: TaskUpdateData) => {
+    updateTask.mutate(
+      { taskId, data },
+      {
+        onError: () => toast.error("Failed to update task"),
+      },
+    );
+  };
+
   const activeTask = useMemo(
     () => localTasks.find((t) => t.id === activeId),
     [activeId, localTasks],
@@ -661,6 +670,8 @@ export function KanbanBoard({
                                   title={col.title}
                                   tasks={columnTasks}
                                   onTaskClick={setSelectedTask}
+                                  onTaskUpdate={handleCardUpdate}
+                                  onTaskDelete={handleDelete}
                                   isFirstColumn={index === 0}
                                   onCreateTask={handleCreate}
                                 />
@@ -694,6 +705,8 @@ export function KanbanBoard({
                                 title={col.title}
                                 tasks={columnTasks}
                                 onTaskClick={setSelectedTask}
+                                onTaskUpdate={handleCardUpdate}
+                                onTaskDelete={handleDelete}
                                 isFirstColumn={index === 0}
                                 onCreateTask={handleCreate}
                               />
@@ -723,6 +736,8 @@ export function KanbanBoard({
                               title={col.title}
                               tasks={columnTasks}
                               onTaskClick={setSelectedTask}
+                              onTaskUpdate={handleCardUpdate}
+                              onTaskDelete={handleDelete}
                               isFirstColumn={index === 0}
                               onCreateTask={handleCreate}
                             />
@@ -748,6 +763,8 @@ export function KanbanBoard({
                     title={col.title}
                     tasks={columnTasks}
                     onTaskClick={setSelectedTask}
+                    onTaskUpdate={handleCardUpdate}
+                    onTaskDelete={handleDelete}
                     isFirstColumn={index === 0}
                     onCreateTask={handleCreate}
                   />

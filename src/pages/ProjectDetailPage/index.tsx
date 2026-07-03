@@ -7,7 +7,6 @@ import {
   KanbanSquare,
   List,
   Maximize2,
-  MoreHorizontal,
   Plus,
   Share2,
   Users,
@@ -31,6 +30,7 @@ import {
   SPACE_AVATARS,
   getSpaceAvatar,
 } from "@/features/projects/model/avatars";
+import { ProjectActionsMenu } from "./ProjectActionsMenu";
 
 type GroupBy = "None" | "Assignee" | "Epic" | "Subtask";
 
@@ -202,13 +202,7 @@ export default function ProjectDetailPage() {
                 22
               </Badge>
             </h1>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            >
-              <MoreHorizontal className="w-4 h-4" />
-            </Button>
+            <ProjectActionsMenu project={project} />
           </div>
 
           <div className="flex items-center gap-2">

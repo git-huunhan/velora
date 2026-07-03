@@ -24,8 +24,10 @@ export async function getProjects(
 ): Promise<PaginatedProjects> {
   await delay(600);
 
-  let filtered = [...projectsDb];
-  if (status && status !== "all") {
+  let filtered = projectsDb.filter((project) => !project.archivedAt);
+  if (status === "archived") {
+    filtered = projectsDb.filter((project) => !!project.archivedAt);
+  } else if (status && status !== "all") {
     filtered = filtered.filter((p) => p.status === status);
   }
 

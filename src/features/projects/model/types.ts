@@ -10,6 +10,7 @@ export interface Project {
   endDate: string;
   memberIds: string[];
   avatar?: string;
+  archivedAt?: string;
 }
 
 export interface PaginatedProjects {

@@ -4,9 +4,10 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import type { Task, TaskStatus } from "../../model/types";
+import type { Task, TaskStatus, TaskUpdateData } from "../../model/types";
 import { TaskCard } from "../TaskCard/TaskCard";
 import { QuickCreateInput } from "../shared/QuickCreateInput";
+import { ColumnActionsMenu } from "./ColumnActionsMenu";
 
 interface BoardColumnProps {
   columnId: TaskStatus;
@@ -16,6 +17,8 @@ interface BoardColumnProps {
   tasks: Task[];
   isFirstColumn?: boolean;
   onTaskClick: (task: Task) => void;
+  onTaskUpdate?: (taskId: string, data: TaskUpdateData) => void;
+  onTaskDelete?: (task: Task) => void;
   onCreateTask?: (data: {
     title: string;
     type: "task" | "epic" | "bug";
@@ -33,6 +36,8 @@ export function BoardColumn({
   tasks,
   isFirstColumn,
   onTaskClick,
+  onTaskUpdate,
+  onTaskDelete,
   onCreateTask,
 }: BoardColumnProps) {
   const { setNodeRef } = useDroppable({
@@ -47,12 +52,15 @@ export function BoardColumn({
   const [isCreating, setIsCreating] = useState(false);
 
   return (
-    <div className="flex flex-col rounded-xl border bg-muted/50 min-w-70 w-70 shrink-0 group mr-6 last:mr-0 pb-2">
+    <div className="group/column flex flex-col rounded-xl border bg-muted/50 min-w-70 w-70 shrink-0 mr-6 last:mr-0 pb-2">
       <div className="flex items-center justify-between px-4 py-3 border-b">
-        <span className="text-sm font-semibold text-foreground">{title}</span>
-        <span className="flex items-center justify-center h-5 min-w-6 px-1.5 rounded-md text-xs font-medium border tabular-nums bg-muted text-muted-foreground border-border/60">
-          {tasks.length}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-foreground">{title}</span>
+          <span className="flex items-center justify-center h-5 min-w-6 px-1.5 rounded-md text-xs font-medium border tabular-nums bg-muted text-muted-foreground border-border/60">
+            {tasks.length}
+          </span>
+        </div>
+        <ColumnActionsMenu title={title} taskCount={tasks.length} />
       </div>
 
       <div className="flex-1 min-h-[50px] overflow-y-auto overflow-x-hidden custom-scrollbar">
@@ -62,13 +70,19 @@ export function BoardColumn({
             strategy={verticalListSortingStrategy}
           >
             {tasks.map((task) => (
-              <TaskCard key={task.id} task={task} onClick={onTaskClick} />
+              <TaskCard
+                key={task.id}
+                task={task}
+                onClick={onTaskClick}
+                onUpdate={onTaskUpdate}
+                onDelete={onTaskDelete}
+              />
             ))}
           </SortableContext>
 
           {onCreateTask && (
             <div
-              className={`mt-1 transition-opacity ${isFirstColumn || isCreating ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-within:opacity-100"}`}
+              className={`mt-1 transition-opacity ${isFirstColumn || isCreating ? "opacity-100" : "opacity-0 group-hover/column:opacity-100 focus-within:opacity-100"}`}
             >
               {isCreating ? (
                 <div className="animate-in fade-in duration-150">
