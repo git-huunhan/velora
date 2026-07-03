@@ -36,6 +36,7 @@ export function BoardInsightsPopover() {
 
   const { id } = useParams<{ id: string }>();
   const { data: tasks = [] } = useTasksByProject(id || "");
+  const [now] = useState(() => Date.now());
 
   const overdueTasks = tasks.filter((task) => {
     if (task.status === "done") return false;
@@ -49,8 +50,6 @@ export function BoardInsightsPopover() {
 
   const timeSpentData = useMemo(() => {
     const activeStatuses = KANBAN_COLUMNS.filter((col) => col.id !== "done");
-    const now = Date.now();
-
     const stats = activeStatuses.map((col) => {
       const colTasks = tasks.filter((t) => t.status === col.id);
       if (colTasks.length === 0) return { ...col, avgAgeMs: 0, count: 0 };
@@ -96,7 +95,7 @@ export function BoardInsightsPopover() {
         };
       })
       .sort((a, b) => b.percent - a.percent);
-  }, [tasks]);
+  }, [now, tasks]);
 
   const PAGE_SIZE = 3;
   const totalPages = Math.ceil(overdueTasks.length / PAGE_SIZE);

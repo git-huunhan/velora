@@ -1,4 +1,4 @@
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 
@@ -43,7 +43,7 @@ export function ProjectForm({
     register,
     handleSubmit,
     setValue,
-    watch,
+    control,
     formState: { errors },
   } = useForm<ProjectFormData>({
     resolver: zodResolver(projectSchema),
@@ -58,7 +58,10 @@ export function ProjectForm({
     },
   });
 
-  const selectedMembers = watch("memberIds");
+  const selectedMembers = useWatch({
+    control,
+    name: "memberIds",
+  });
 
   const toggleMember = (userId: string) => {
     const current = new Set(selectedMembers);

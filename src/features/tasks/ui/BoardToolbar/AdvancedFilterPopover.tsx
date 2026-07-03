@@ -1,6 +1,7 @@
 import {
   closestCenter,
   DndContext,
+  type DragEndEvent,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -171,8 +172,9 @@ export function AdvancedFilterPopover({
     return [...pinned, ...unpinned];
   }, [categoriesOrder, pinnedCategories]);
 
-  const handleDragEnd = (event: any) => {
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    if (!over) return;
     if (active.id !== over.id) {
       const oldIndex = displayOrder.indexOf(active.id as FilterCategory);
       const newIndex = displayOrder.indexOf(over.id as FilterCategory);

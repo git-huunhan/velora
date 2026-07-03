@@ -43,6 +43,7 @@ import {
   useUpdateProject,
   type Project,
 } from "@/features/projects";
+import type { ProjectFormData } from "@/features/projects/ui/ProjectForm/ProjectForm";
 import { useUrlParams } from "@/shared/hooks/useUrlParams";
 import { FolderKanban, Search, Star, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
@@ -91,7 +92,7 @@ export default function ProjectsPage() {
     });
   };
 
-  const handleCreateProject = (data: any) => {
+  const handleCreateProject = (data: ProjectFormData) => {
     createMutation.mutate(data, {
       onSuccess: () => {
         setIsModalOpen(false);
@@ -105,7 +106,7 @@ export default function ProjectsPage() {
     });
   };
 
-  const handleEditProject = (data: any) => {
+  const handleEditProject = (data: ProjectFormData) => {
     if (!editingProject) return;
     updateMutation.mutate(
       { id: editingProject.id, data },

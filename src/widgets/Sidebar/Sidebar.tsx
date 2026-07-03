@@ -1,4 +1,12 @@
-import { useRef, useEffect, useState, forwardRef } from "react";
+import {
+  useRef,
+  useEffect,
+  useState,
+  forwardRef,
+  type ComponentType,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
 import {
   UserCircle,
   Clock,
@@ -32,7 +40,16 @@ import { getSpaceAvatar } from "@/features/projects/model/avatars";
 import { useProjects } from "@/features/projects";
 import { useSidebar } from "./useSidebar";
 
-const SidebarItem = forwardRef<HTMLDivElement, any>(
+interface SidebarItemProps extends HTMLAttributes<HTMLDivElement> {
+  icon?: ComponentType<{ className?: string }>;
+  label: string;
+  rightIcon?: ComponentType<{ className?: string }>;
+  rightAction?: ReactNode;
+  isActive?: boolean;
+  hasLeftHighlight?: boolean;
+}
+
+const SidebarItem = forwardRef<HTMLDivElement, SidebarItemProps>(
   (
     {
       icon: Icon,

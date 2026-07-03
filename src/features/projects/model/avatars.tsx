@@ -1,9 +1,11 @@
+import type { SVGProps } from "react";
+
 export const SPACE_AVATARS = [
   {
     id: "1",
     bg: "bg-purple-500", // Parrot
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -26,7 +28,7 @@ export const SPACE_AVATARS = [
     id: "2",
     bg: "bg-blue-500", // Cloud
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -54,7 +56,7 @@ export const SPACE_AVATARS = [
     id: "3",
     bg: "bg-orange-500", // Disc
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -77,7 +79,7 @@ export const SPACE_AVATARS = [
     id: "4",
     bg: "bg-orange-500", // Browser
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -103,7 +105,7 @@ export const SPACE_AVATARS = [
     id: "5",
     bg: "bg-green-500", // Mountain
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -121,7 +123,7 @@ export const SPACE_AVATARS = [
     id: "6",
     bg: "bg-cyan-500", // Coffee
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -151,7 +153,7 @@ export const SPACE_AVATARS = [
     id: "7",
     bg: "bg-yellow-400", // Rocket
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -174,7 +176,7 @@ export const SPACE_AVATARS = [
     id: "8",
     bg: "bg-purple-500", // Telescope
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -192,7 +194,7 @@ export const SPACE_AVATARS = [
     id: "9",
     bg: "bg-red-500", // Shield
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -217,7 +219,7 @@ export const SPACE_AVATARS = [
     id: "10",
     bg: "bg-blue-500", // Map
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -245,7 +247,7 @@ export const SPACE_AVATARS = [
     id: "11",
     bg: "bg-emerald-500", // Ghost
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -266,7 +268,7 @@ export const SPACE_AVATARS = [
     id: "12",
     bg: "bg-teal-500", // Paint
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -297,7 +299,7 @@ export const SPACE_AVATARS = [
     id: "13",
     bg: "bg-indigo-500", // Gamepad
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -320,7 +322,7 @@ export const SPACE_AVATARS = [
     id: "14",
     bg: "bg-pink-500", // Crown
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -339,7 +341,7 @@ export const SPACE_AVATARS = [
     id: "15",
     bg: "bg-rose-500", // Heart
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -361,7 +363,7 @@ export const SPACE_AVATARS = [
     id: "16",
     bg: "bg-blue-600", // Fish
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -379,7 +381,7 @@ export const SPACE_AVATARS = [
     id: "17",
     bg: "bg-lime-500", // Leaf
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -407,7 +409,7 @@ export const SPACE_AVATARS = [
     id: "18",
     bg: "bg-cyan-600", // Flag
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -430,7 +432,7 @@ export const SPACE_AVATARS = [
     id: "19",
     bg: "bg-fuchsia-500", // Compass
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -449,7 +451,7 @@ export const SPACE_AVATARS = [
     id: "20",
     bg: "bg-purple-700", // Moon
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -469,7 +471,7 @@ export const SPACE_AVATARS = [
     id: "21",
     bg: "bg-red-600", // Key
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -492,7 +494,7 @@ export const SPACE_AVATARS = [
     id: "22",
     bg: "bg-blue-400", // Book
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -516,7 +518,7 @@ export const SPACE_AVATARS = [
     id: "23",
     bg: "bg-green-600", // Puzzle
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -535,7 +537,7 @@ export const SPACE_AVATARS = [
     id: "24",
     bg: "bg-cyan-700", // Magnet
     text: "text-white",
-    icon: (props: any) => (
+    icon: (props: SVGProps<SVGSVGElement>) => (
       <svg
         viewBox="0 0 24 24"
         fill="none"

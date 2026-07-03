@@ -72,7 +72,7 @@ export function Header() {
   const navigate = useNavigate();
 
   // Feature 2: Command Palette (Ctrl+K)
-  const CommandPaletteContent = ({ close }: { close: () => void }) => {
+  const renderCommandPalette = (close: () => void) => {
     const run = (cmd: () => void) => {
       close();
       cmd();
@@ -109,7 +109,7 @@ export function Header() {
   };
 
   // Feature 1: Global Search Modal Content
-  const SearchModalContent = ({ close }: { close: () => void }) => {
+  const renderSearchModal = (close: () => void) => {
     return (
       <div className="flex flex-col h-[600px] max-h-[80vh] w-[800px] max-w-[90vw]">
         <div className="flex items-center border-b border-border px-4 py-3">
@@ -236,7 +236,7 @@ export function Header() {
     );
   };
 
-  const UserMenu = () => (
+  const renderUserMenu = () => (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button className="flex items-center justify-center rounded-full hover:bg-accent transition-colors">
@@ -279,7 +279,7 @@ export function Header() {
         open={isMobileCommandOpen}
         onOpenChange={setIsMobileCommandOpen}
       >
-        <CommandPaletteContent close={() => setIsMobileCommandOpen(false)} />
+        {renderCommandPalette(() => setIsMobileCommandOpen(false))}
       </CommandDialog>
 
       <header className="flex h-14 items-center border-b bg-background shrink-0">
@@ -366,14 +366,10 @@ export function Header() {
                   maxWidth: "90vw",
                 }}
               >
-                {activePopover === "search" && (
-                  <SearchModalContent close={() => setActivePopover("none")} />
-                )}
-                {activePopover === "command" && (
-                  <CommandPaletteContent
-                    close={() => setActivePopover("none")}
-                  />
-                )}
+                {activePopover === "search" &&
+                  renderSearchModal(() => setActivePopover("none"))}
+                {activePopover === "command" &&
+                  renderCommandPalette(() => setActivePopover("none"))}
               </PopoverContent>
             </Popover>
           </div>
@@ -398,9 +394,7 @@ export function Header() {
                 <Settings className="h-5 w-5" />
               </button>
               <ModeToggle />
-              <div className="ml-2">
-                <UserMenu />
-              </div>
+              <div className="ml-2">{renderUserMenu()}</div>
             </div>
 
             {/* Mobile More Menu */}
@@ -425,9 +419,7 @@ export function Header() {
                       <Settings className="h-5 w-5" />
                     </button>
                     <ModeToggle />
-                    <div className="ml-1">
-                      <UserMenu />
-                    </div>
+                    <div className="ml-1">{renderUserMenu()}</div>
                   </div>
                 </PopoverContent>
               </Popover>
