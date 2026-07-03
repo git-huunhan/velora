@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Paperclip,
   Loader2,
+  SquaresExclude,
 } from "lucide-react";
 import { useParams } from "react-router-dom";
 import type { Task, TaskUpdateData } from "../../model/types";
@@ -18,6 +19,7 @@ import { PriorityIcon } from "../PriorityIcon";
 import { TaskCardActions } from "./TaskCardActions";
 
 import { useViewSettingsStore } from "../../model/useViewSettingsStore";
+import { isSubtask } from "../../model/taskHierarchy";
 
 interface TaskCardProps {
   task: Task;
@@ -93,6 +95,8 @@ export function TaskCard({
                   <Crown className="w-3.5 h-3.5 text-purple-500 shrink-0" />
                 ) : task.type === "bug" ? (
                   <Bug className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                ) : isSubtask(task, tasks) ? (
+                  <SquaresExclude className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
                 ) : (
                   <ClipboardList className="w-3.5 h-3.5 text-primary shrink-0" />
                 )}

@@ -92,6 +92,7 @@ export function useCreateTask() {
         order: newTaskData.order ?? Number.MAX_SAFE_INTEGER,
         assigneeId: newTaskData.assigneeId || undefined,
         reporterId: "user-1",
+        parentId: newTaskData.parentId,
         dueDate: newTaskData.dueDate || undefined,
         description: undefined,
         createdAt: new Date().toISOString(),

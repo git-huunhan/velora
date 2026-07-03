@@ -1,12 +1,15 @@
 import {
+  Bug,
   CalendarIcon,
   ChevronDown,
+  ClipboardList,
   Crown,
   Tag,
   User as UserIcon,
   X,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -34,6 +37,11 @@ import { useUsers } from "@/features/users";
 import { mockUsers } from "@/features/users/model/mockUsers";
 import { useTasksByProject } from "@/features/tasks/model/useTasks";
 import type { Task, TaskFieldUpdater } from "../../../model/types";
+import {
+  getTaskParent,
+  getValidParentTasks,
+  isSubtask,
+} from "../../../model/taskHierarchy";
 import { PriorityIcon } from "../../PriorityIcon";
 import { TaskStatusSelect } from "../../shared/TaskStatusSelect";
 
@@ -71,10 +79,9 @@ export function TaskSidebar({
   };
 
   const { data: tasks = [] } = useTasksByProject(task.projectId);
-  const parentTask = tasks.find((t) => t.id === task.parentId);
-  const potentialParents = tasks.filter(
-    (t) => t.id !== task.id && t.type !== "task" && t.id !== task.parentId,
-  );
+  const parentTask = getTaskParent(task, tasks);
+  const taskIsSubtask = isSubtask(task, tasks);
+  const potentialParents = getValidParentTasks(task, tasks);
 
   return (
     <div
@@ -131,7 +138,13 @@ export function TaskSidebar({
                                 }
                               }}
                             >
-                              <Crown className="w-4 h-4 text-purple-500 shrink-0" />
+                              {parentTask.type === "epic" ? (
+                                <Crown className="w-4 h-4 text-purple-500 shrink-0" />
+                              ) : parentTask.type === "bug" ? (
+                                <Bug className="w-4 h-4 text-red-500 shrink-0" />
+                              ) : (
+                                <ClipboardList className="w-4 h-4 text-primary shrink-0" />
+                              )}
                               <span className="truncate hover:underline">
                                 {parentTask.code}: {parentTask.title}
                               </span>
@@ -158,7 +171,13 @@ export function TaskSidebar({
                                   }}
                                   className="cursor-pointer flex items-center gap-2"
                                 >
-                                  <Crown className="w-4 h-4 text-purple-500 shrink-0" />
+                                  {pt.type === "epic" ? (
+                                    <Crown className="w-4 h-4 text-purple-500 shrink-0" />
+                                  ) : pt.type === "bug" ? (
+                                    <Bug className="w-4 h-4 text-red-500 shrink-0" />
+                                  ) : (
+                                    <ClipboardList className="w-4 h-4 text-primary shrink-0" />
+                                  )}
                                   <div className="flex flex-col min-w-0">
                                     <span className="font-medium text-[13px]">
                                       {pt.code}
@@ -172,6 +191,16 @@ export function TaskSidebar({
                               {task.parentId && (
                                 <CommandItem
                                   onSelect={() => {
+                                    if (taskIsSubtask) {
+                                      toast.error(
+                                        "We couldn't update the Parent value",
+                                        {
+                                          description: `Failed to remove ${task.code}'s parent. A parent of a subtask cannot be removed.`,
+                                        },
+                                      );
+                                      setIsParentSelectOpen(false);
+                                      return;
+                                    }
                                     handleUpdate("parentId", null);
                                     setIsParentSelectOpen(false);
                                   }}

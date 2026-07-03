@@ -45,6 +45,11 @@ import {
 } from "@/features/tasks";
 import type { Task, TaskStatus, TaskUpdateData } from "../../model/types";
 import { calculateTaskOrder } from "../../model/taskOrder";
+import {
+  getTaskParent,
+  isSubtask,
+  validateParentAssignment,
+} from "../../model/taskHierarchy";
 import { filterTasks, mergeServerTasks } from "../../model/taskViewUtils";
 import { BoardColumn } from "../BoardColumn/BoardColumn";
 import { TaskCard } from "../TaskCard/TaskCard";
@@ -56,12 +61,55 @@ type GroupBy = "None" | "Assignee" | "Epic" | "Subtask";
 
 const EMPTY_TASKS: Task[] = [];
 
-function isTaskInSameLane(task: Task, target: Task, groupBy: GroupBy) {
-  if (task.status !== target.status || task.type === "epic") return false;
-  if (groupBy === "Assignee") return task.assigneeId === target.assigneeId;
-  if (groupBy === "Epic" || groupBy === "Subtask") {
-    return task.parentId === target.parentId;
+function getEpicLaneId(task: Task, tasks: Task[]) {
+  let parentId = task.parentId;
+  const visited = new Set<string>();
+
+  while (parentId && !visited.has(parentId)) {
+    visited.add(parentId);
+    const parent = tasks.find((candidate) => candidate.id === parentId);
+    if (!parent) return undefined;
+    if (parent.type === "epic") return parent.id;
+    parentId = parent.parentId;
   }
+
+  return undefined;
+}
+
+function getSubtaskLaneId(task: Task, tasks: Task[]) {
+  const hasChildren = tasks.some((candidate) => candidate.parentId === task.id);
+  if (
+    hasChildren &&
+    (task.type === "task" || task.type === "bug") &&
+    !isSubtask(task, tasks)
+  )
+    return task.id;
+
+  const parent = getTaskParent(task, tasks);
+  return parent?.type === "task" || parent?.type === "bug"
+    ? parent.id
+    : undefined;
+}
+
+function getTaskLaneId(task: Task, tasks: Task[], groupBy: GroupBy) {
+  if (groupBy === "Assignee") return task.assigneeId;
+  if (groupBy === "Epic") return getEpicLaneId(task, tasks);
+  if (groupBy === "Subtask") return getSubtaskLaneId(task, tasks);
+  return undefined;
+}
+
+function isTaskInSameLane(
+  task: Task,
+  target: Task,
+  tasks: Task[],
+  groupBy: GroupBy,
+) {
+  if (task.status !== target.status || task.type === "epic") return false;
+  if (groupBy !== "None")
+    return (
+      getTaskLaneId(task, tasks, groupBy) ===
+      getTaskLaneId(target, tasks, groupBy)
+    );
   return true;
 }
 
@@ -86,6 +134,7 @@ function SwimlaneGroup({
   avatar,
   isFallbackGroup,
   parentTask,
+  onParentTaskClick,
   children,
 }: {
   title: string;
@@ -93,6 +142,7 @@ function SwimlaneGroup({
   avatar?: string;
   isFallbackGroup?: boolean;
   parentTask?: Task;
+  onParentTaskClick?: (task: Task) => void;
   children: React.ReactNode;
 }) {
   const [isExpanded, setIsExpanded] = useState(true);
@@ -120,21 +170,36 @@ function SwimlaneGroup({
           )}
         </div>
 
-        {!isFallbackGroup &&
-          parentTask &&
-          (parentTask.type === "epic" ? (
-            <div className="ml-1 flex">
+        {parentTask && (
+          <button
+            className="ml-1 flex items-center gap-2 rounded-md px-1.5 py-1 cursor-pointer no-underline hover:no-underline hover:bg-muted hover:text-foreground transition-colors"
+            onClick={(event) => {
+              event.stopPropagation();
+              onParentTaskClick?.(parentTask);
+            }}
+          >
+            {parentTask.type === "epic" ? (
               <Crown className="w-4 h-4 text-purple-500" />
-            </div>
-          ) : parentTask.type === "bug" ? (
-            <div className="ml-1 flex">
+            ) : parentTask.type === "bug" ? (
               <Bug className="w-4 h-4 text-red-500" />
-            </div>
-          ) : (
-            <div className="ml-1 flex">
+            ) : (
               <ClipboardList className="w-4 h-4 text-primary" />
-            </div>
-          ))}
+            )}
+            <span className="text-[13px] leading-none text-muted-foreground font-medium">
+              {parentTask.code || `TASK-${parentTask.id.slice(-3)}`}
+            </span>
+            <span className="font-semibold text-[13px] leading-none">
+              {title}
+            </span>
+            <span className="inline-flex h-5 translate-y-px items-center text-[11px] leading-none text-muted-foreground font-medium">
+              ({taskCount} work item{taskCount !== 1 ? "s" : ""})
+            </span>
+            <span className="ml-2 inline-flex h-5 items-center px-2 rounded-[4px] bg-secondary text-secondary-foreground text-[10px] leading-none font-bold uppercase tracking-wider">
+              {KANBAN_COLUMNS.find((c) => c.id === parentTask.status)?.title ||
+                parentTask.status}
+            </span>
+          </button>
+        )}
 
         {!isFallbackGroup && !parentTask && avatar && (
           <Avatar className="w-6 h-6 border ml-1">
@@ -155,23 +220,14 @@ function SwimlaneGroup({
           </Avatar>
         )}
 
-        <div className="flex items-center gap-2 ml-2">
-          {parentTask && (
-            <span className="text-[13px] text-muted-foreground font-medium">
-              {parentTask.code || `TASK-${parentTask.id.slice(-3)}`}
+        {!parentTask && (
+          <div className="flex items-center gap-2 ml-2">
+            <span className="font-semibold text-[13px]">{title}</span>
+            <span className="text-[11px] text-muted-foreground font-medium translate-y-[1px]">
+              ({taskCount} work item{taskCount !== 1 ? "s" : ""})
             </span>
-          )}
-          <span className="font-semibold text-[13px]">{title}</span>
-          <span className="text-[11px] text-muted-foreground font-medium translate-y-[1px]">
-            ({taskCount} work item{taskCount !== 1 ? "s" : ""})
-          </span>
-          {parentTask && (
-            <div className="ml-2 px-2 py-0.5 rounded-[4px] bg-secondary text-secondary-foreground text-[10px] font-bold uppercase tracking-wider">
-              {KANBAN_COLUMNS.find((c) => c.id === parentTask.status)?.title ||
-                parentTask.status}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
       {isExpanded && (
         <div className="flex h-fit max-h-full min-h-0">{children}</div>
@@ -321,12 +377,9 @@ export function KanbanBoard({
       if (groupBy === "Assignee") {
         if (t.assigneeId) currentGroups.add(t.assigneeId);
         else currentHasUngrouped = true;
-      } else if (groupBy === "Epic") {
-        const parent = serverTasks.find((pt) => pt.id === t.parentId);
-        if (parent && parent.type === "epic") currentGroups.add(parent.id);
-        else currentHasUngrouped = true;
-      } else if (groupBy === "Subtask") {
-        if (t.parentId) currentGroups.add(t.parentId);
+      } else if (groupBy === "Epic" || groupBy === "Subtask") {
+        const laneId = getTaskLaneId(t, localTasks, groupBy);
+        if (laneId) currentGroups.add(laneId);
         else currentHasUngrouped = true;
       }
     });
@@ -389,18 +442,24 @@ export function KanbanBoard({
           }
           shouldUpdate = true;
         } else if (groupBy === "Epic" || groupBy === "Subtask") {
-          let targetParentId = undefined;
-          if (groupBy === "Epic") {
-            if (overTask.type === "epic") {
-              targetParentId = overTask.id;
-            } else {
-              const parent = serverTasks.find(
-                (pt) => pt.id === overTask.parentId,
-              );
-              if (parent && parent.type === "epic") targetParentId = parent.id;
-            }
-          } else if (groupBy === "Subtask") {
-            targetParentId = overTask.parentId;
+          const currentLaneId = getTaskLaneId(activeTask, tasks, groupBy);
+          const targetLaneId = getTaskLaneId(overTask, tasks, groupBy);
+          if (
+            groupBy === "Subtask" &&
+            isSubtask(activeTask, tasks) &&
+            !targetLaneId
+          ) {
+            return tasks;
+          }
+          const targetParentId =
+            currentLaneId === targetLaneId ||
+            (groupBy === "Subtask" && targetLaneId === activeTask.id)
+              ? activeTask.parentId
+              : targetLaneId;
+          if (
+            !validateParentAssignment(activeTask, targetParentId, tasks).valid
+          ) {
+            return tasks;
           }
 
           if (activeTask.parentId !== targetParentId) {
@@ -464,8 +523,26 @@ export function KanbanBoard({
             shouldUpdate = true;
           }
         } else if (groupBy === "Epic" || groupBy === "Subtask") {
-          const targetParentId =
+          const currentLaneId = getTaskLaneId(activeTask, tasks, groupBy);
+          const targetLaneId =
             overGroupId === "ungrouped" ? undefined : overGroupId;
+          if (
+            groupBy === "Subtask" &&
+            isSubtask(activeTask, tasks) &&
+            !targetLaneId
+          ) {
+            return tasks;
+          }
+          const targetParentId =
+            currentLaneId === targetLaneId ||
+            (groupBy === "Subtask" && targetLaneId === activeTask.id)
+              ? activeTask.parentId
+              : targetLaneId;
+          if (
+            !validateParentAssignment(activeTask, targetParentId, tasks).valid
+          ) {
+            return tasks;
+          }
           if (activeTask.parentId !== targetParentId) {
             newActiveTask.parentId = targetParentId;
             shouldUpdate = true;
@@ -524,7 +601,7 @@ export function KanbanBoard({
         }
 
         const laneTasks = localTasks.filter((task) =>
-          isTaskInSameLane(task, updatedTask, groupBy),
+          isTaskInSameLane(task, updatedTask, localTasks, groupBy),
         );
         const movedIndex = laneTasks.findIndex(
           (task) => task.id === updatedTask.id,
@@ -558,13 +635,16 @@ export function KanbanBoard({
     }
   };
 
-  const handleCreate = (data: {
-    title: string;
-    type: "task" | "epic" | "bug";
-    assigneeId: string | null;
-    dueDate: string | null;
-    status: TaskStatus;
-  }) => {
+  const handleCreate = (
+    data: {
+      title: string;
+      type: "task" | "epic" | "bug";
+      assigneeId: string | null;
+      dueDate: string | null;
+      status: TaskStatus;
+    },
+    lane?: { assigneeId?: string; parentId?: string },
+  ) => {
     createTask.mutate(
       {
         title: data.title,
@@ -572,7 +652,8 @@ export function KanbanBoard({
         status: data.status,
         priority: "medium",
         labels: [],
-        assigneeId: data.assigneeId || undefined,
+        assigneeId: lane?.assigneeId ?? data.assigneeId ?? undefined,
+        parentId: lane?.parentId,
         dueDate: data.dueDate || undefined,
         projectId,
       },
@@ -724,7 +805,7 @@ export function KanbanBoard({
     [activeId, localTasks],
   );
 
-  const filteredTasks = filterTasks(localTasks, {
+  const baseFilteredTasks = filterTasks(localTasks, {
     searchQuery,
     parentIds,
     assigneeIds,
@@ -736,6 +817,17 @@ export function KanbanBoard({
     supportNoParent: true,
     labelMatch: "any",
   });
+  const filteredTasks =
+    groupBy === "Subtask"
+      ? baseFilteredTasks.filter(
+          (task) => getSubtaskLaneId(task, localTasks) !== task.id,
+        )
+      : baseFilteredTasks.filter((task) => {
+          const parent = task.parentId
+            ? localTasks.find((candidate) => candidate.id === task.parentId)
+            : undefined;
+          return !parent || parent.type === "epic";
+        });
 
   if (isLoading)
     return (
@@ -793,23 +885,12 @@ export function KanbanBoard({
                     } else {
                       ungrouped.push(t);
                     }
-                  } else if (groupBy === "Epic") {
-                    const parent = serverTasks.find(
-                      (pt) => pt.id === t.parentId,
-                    );
-                    if (parent && parent.type === "epic") {
-                      if (!grouped.has(parent.id)) grouped.set(parent.id, []);
-                      grouped.get(parent.id)!.push(t);
-                    } else {
-                      ungrouped.push(t);
-                    }
-                  } else if (groupBy === "Subtask") {
-                    if (t.parentId) {
-                      if (!grouped.has(t.parentId)) grouped.set(t.parentId, []);
-                      grouped.get(t.parentId)!.push(t);
-                    } else {
-                      ungrouped.push(t);
-                    }
+                  } else if (groupBy === "Epic" || groupBy === "Subtask") {
+                    const laneId = getTaskLaneId(t, localTasks, groupBy);
+                    if (laneId) {
+                      if (!grouped.has(laneId)) grouped.set(laneId, []);
+                      grouped.get(laneId)!.push(t);
+                    } else ungrouped.push(t);
                   }
                 });
 
@@ -849,7 +930,9 @@ export function KanbanBoard({
                                   onTaskUpdate={handleCardUpdate}
                                   onTaskDelete={handleDelete}
                                   isFirstColumn={index === 0}
-                                  onCreateTask={handleCreate}
+                                  onCreateTask={(data) =>
+                                    handleCreate(data, { assigneeId: groupId })
+                                  }
                                 />
                               );
                             })}
@@ -866,6 +949,7 @@ export function KanbanBoard({
                           key={groupId}
                           title={parentTask?.title || groupId}
                           parentTask={parentTask}
+                          onParentTaskClick={setSelectedTask}
                           taskCount={tasks.length}
                         >
                           {columns.map((col, index) => {
@@ -885,7 +969,9 @@ export function KanbanBoard({
                                 onTaskUpdate={handleCardUpdate}
                                 onTaskDelete={handleDelete}
                                 isFirstColumn={index === 0}
-                                onCreateTask={handleCreate}
+                                onCreateTask={(data) =>
+                                  handleCreate(data, { parentId: groupId })
+                                }
                               />
                             );
                           })}

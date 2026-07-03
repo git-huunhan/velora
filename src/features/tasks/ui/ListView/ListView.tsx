@@ -23,6 +23,7 @@ import {
   Trash2,
   GripVertical,
   CornerDownLeft,
+  SquaresExclude,
   User,
 } from "lucide-react";
 import {
@@ -93,6 +94,7 @@ import {
   flattenTaskTree,
   orderTaskTree,
 } from "../../model/taskViewUtils";
+import { isSubtask } from "../../model/taskHierarchy";
 
 // ---------- InlineCreateRow ----------
 function QuickCreateInput({
@@ -120,10 +122,11 @@ function QuickCreateInput({
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Element;
+      if (!target.isConnected) return;
       if (containerRef.current && containerRef.current.contains(target)) return;
       if (
         target.closest(
-          '[role="dialog"], [role="menu"], [role="listbox"], [data-radix-popper-content-wrapper]',
+          '[role="dialog"], [role="menu"], [role="listbox"], [data-radix-popper-content-wrapper], [data-radix-portal]',
         )
       )
         return;
@@ -140,7 +143,7 @@ function QuickCreateInput({
 
   const content = (
     <div className="flex-1 flex items-center gap-2 border-[1.5px] border-primary rounded-md p-1 bg-background shadow-[0_0_0_1px_rgba(59,130,246,0.1)] mx-[1px]">
-      <DropdownMenu>
+      <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <div className="flex items-center gap-1 px-1.5 text-muted-foreground hover:bg-muted/50 rounded cursor-pointer h-7">
             {type === "epic" ? (
@@ -327,7 +330,7 @@ interface SortableTableRowProps {
   editDueDateValue: string;
   todayPlaceholder: string;
   getPriorityLabel: (priority: string) => string;
-  getTypeIcon: (type?: string) => React.ReactNode;
+  getTypeIcon: (task: Task) => React.ReactNode;
   getStatusClass: (status: TaskStatus) => string;
   formatDueDateDisplay: (date?: string) => string;
   onToggleCollapse: (id: string, event: React.MouseEvent) => void;
@@ -485,7 +488,7 @@ function SortableTableRow({
               )}
             </div>
           )}
-          {getTypeIcon(task.type)}
+          {getTypeIcon(task)}
           <span
             className="text-primary hover:underline font-medium cursor-pointer shrink-0"
             onClick={(e) => {
@@ -1080,8 +1083,12 @@ export function ListView({
     setEditingTitleId(null);
   };
 
-  const getTypeIcon = (type?: string) => {
-    switch (type) {
+  const getTypeIcon = (task: Task) => {
+    if (isSubtask(task, tasks)) {
+      return <SquaresExclude className="w-4 h-4 text-cyan-500" />;
+    }
+
+    switch (task.type) {
       case "epic":
         return <Crown className="w-4 h-4 text-purple-500 fill-purple-500/20" />;
       case "bug":
@@ -1206,7 +1213,7 @@ export function ListView({
                       </div>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
-                          {getTypeIcon(task.type ?? "task")}
+                          {getTypeIcon(task)}
                           <span className="text-xs font-medium text-muted-foreground hover:underline">
                             {task.code}
                           </span>

@@ -7,6 +7,7 @@ import {
   Lock,
   MoreHorizontal,
   Share2,
+  SquaresExclude,
   SquarePen,
   X,
 } from "lucide-react";
@@ -21,6 +22,7 @@ import {
 
 import type { Task, TaskFieldUpdater } from "../../../model/types";
 import { useTasksByProject } from "../../../model/useTasks";
+import { getTaskParent, isSubtask } from "../../../model/taskHierarchy";
 
 interface TaskHeaderProps {
   task: Task;
@@ -42,19 +44,29 @@ export function TaskHeader({
 }: TaskHeaderProps) {
   const { data: tasks = [] } = useTasksByProject(task.projectId);
   const epics = tasks.filter((t) => t.type === "epic");
-  const parentEpic = task.parentId
-    ? tasks.find((t) => t.id === task.parentId)
-    : null;
+  const directParent = getTaskParent(task, tasks);
+  const taskIsSubtask = isSubtask(task, tasks);
   return (
     <div className="flex items-center justify-between px-6 py-4 shrink-0 border-b border-border/40 bg-card z-20">
       <div className="flex items-center gap-2.5 text-sm text-muted-foreground font-medium">
         {task.type !== "epic" && (
           <>
-            {parentEpic ? (
-              <span className="hover:underline cursor-pointer transition-colors hover:text-foreground flex items-center gap-1.5">
-                <Crown className="w-4 h-4 text-purple-500" />
-                {parentEpic.code || `TASK-${parentEpic.id.slice(-3)}`}
-              </span>
+            {directParent ? (
+              <>
+                <button
+                  className="hover:underline transition-colors hover:text-foreground flex items-center gap-1.5"
+                  onClick={() => onOpenTask?.(directParent)}
+                >
+                  {directParent.type === "epic" ? (
+                    <Crown className="w-4 h-4 text-purple-500" />
+                  ) : directParent.type === "bug" ? (
+                    <Bug className="w-4 h-4 text-red-500" />
+                  ) : (
+                    <ClipboardList className="w-4 h-4 text-primary" />
+                  )}
+                  {directParent.code || `TASK-${directParent.id.slice(-3)}`}
+                </button>
+              </>
             ) : (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -106,6 +118,8 @@ export function TaskHeader({
             <Crown className="w-4 h-4 text-purple-500" />
           ) : task.type === "bug" ? (
             <Bug className="w-4 h-4 text-red-500" />
+          ) : taskIsSubtask ? (
+            <SquaresExclude className="w-4 h-4 text-cyan-500" />
           ) : (
             <ClipboardList className="w-4 h-4 text-primary" />
           )}

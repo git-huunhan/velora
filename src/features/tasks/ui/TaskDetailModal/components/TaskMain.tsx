@@ -12,7 +12,9 @@ import {
   Search,
   Pencil,
   ArrowDown,
+  Bug,
   CheckSquare,
+  SquaresExclude,
   Globe,
   Video,
 } from "lucide-react";
@@ -47,6 +49,7 @@ import { useLogActivity } from "../../../model/useComments";
 import { mockUsers } from "@/features/users/model/mockUsers";
 import { PriorityIcon } from "../../PriorityIcon";
 import { TaskStatusSelect } from "../../shared/TaskStatusSelect";
+import { isSubtask } from "../../../model/taskHierarchy";
 
 interface TaskMainProps {
   task: Task;
@@ -64,6 +67,17 @@ export function TaskMain({
   const { data: tasks = [] } = useTasksByProject(task.projectId);
   const { mutate: updateTask } = useUpdateTask();
   const { mutate: logActivity } = useLogActivity(task.id);
+  const isEpic = task.type === "epic";
+  const taskIsSubtask = isSubtask(task, tasks);
+  const canHaveChildren =
+    isEpic || ((task.type === "task" || task.type === "bug") && !taskIsSubtask);
+  const childSectionTitle = isEpic ? "Child work items" : "Subtasks";
+  const createChildLabel = isEpic ? "Create child work item" : "Create subtask";
+  const addChildLabel = isEpic ? "Add child work item" : "Add subtask";
+  const childInputPlaceholder = isEpic
+    ? "Name this child work item"
+    : "Name this subtask";
+  const childTypeLabel = isEpic ? "Task" : "Subtask";
   const subtasks = tasks.filter((t) => t.parentId === task.id);
   const doneSubtasks = subtasks.filter((t) => t.status === "done").length;
   const progress =
@@ -99,6 +113,7 @@ export function TaskMain({
   const [isQuickActionsOpen, setIsQuickActionsOpen] = useState(false);
   const subtaskInputRef = useRef<HTMLInputElement>(null);
   const [subtaskTitle, setSubtaskTitle] = useState("");
+  const [childWorkType, setChildWorkType] = useState<"task" | "bug">("task");
   const { mutate: createSubtask, isPending: isCreatingSubtask } =
     useCreateTask();
 
@@ -107,6 +122,7 @@ export function TaskMain({
     if (task) {
       setEditDesc(task.description || "");
       setIsSubtaskFormOpen(false);
+      setChildWorkType("task");
     }
   }, [task]);
 
@@ -146,20 +162,25 @@ export function TaskMain({
                   <CommandList>
                     <CommandEmpty>No action found.</CommandEmpty>
                     <CommandGroup>
-                      <CommandItem
-                        onSelect={() => {
-                          setIsQuickActionsOpen(false);
-                          setIsSubtaskFormOpen(true);
-                          setTimeout(() => subtaskInputRef.current?.focus(), 0);
-                        }}
-                        className="gap-2 cursor-pointer"
-                      >
-                        <GitFork className="w-4 h-4 text-muted-foreground" />
-                        <span>Create subtask</span>
-                        <span className="ml-auto text-xs tracking-widest text-muted-foreground opacity-70">
-                          ⇧ C
-                        </span>
-                      </CommandItem>
+                      {canHaveChildren && (
+                        <CommandItem
+                          onSelect={() => {
+                            setIsQuickActionsOpen(false);
+                            setIsSubtaskFormOpen(true);
+                            setTimeout(
+                              () => subtaskInputRef.current?.focus(),
+                              0,
+                            );
+                          }}
+                          className="gap-2 cursor-pointer"
+                        >
+                          <GitFork className="w-4 h-4 text-muted-foreground" />
+                          <span>{createChildLabel}</span>
+                          <span className="ml-auto text-xs tracking-widest text-muted-foreground opacity-70">
+                            ⇧ C
+                          </span>
+                        </CommandItem>
+                      )}
                       <CommandItem
                         onSelect={() => setIsQuickActionsOpen(false)}
                         className="gap-2 cursor-pointer"
@@ -517,189 +538,156 @@ export function TaskMain({
             )}
           </div>
 
-          {/* Subtasks */}
-          <div className="mb-10">
-            <div className="flex items-center justify-between mb-3">
-              <div
-                className={`flex items-center gap-2 w-fit transition-colors group ${subtasks.length > 0 ? "cursor-pointer hover:bg-muted/40 p-1 -ml-1 rounded-md" : ""}`}
-                onClick={() =>
-                  subtasks.length > 0 && setIsSubtasksOpen(!isSubtasksOpen)
-                }
-              >
+          {/* Child work items / Subtasks */}
+          {canHaveChildren && (
+            <div className="mb-10">
+              <div className="flex items-center justify-between mb-3">
+                <div
+                  className={`flex items-center gap-2 w-fit transition-colors group ${subtasks.length > 0 ? "cursor-pointer hover:bg-muted/40 p-1 -ml-1 rounded-md" : ""}`}
+                  onClick={() =>
+                    subtasks.length > 0 && setIsSubtasksOpen(!isSubtasksOpen)
+                  }
+                >
+                  {subtasks.length > 0 && (
+                    <ChevronDown
+                      className={`w-4 h-4 text-muted-foreground transition-transform ${!isSubtasksOpen ? "-rotate-90" : ""} group-hover:text-foreground`}
+                    />
+                  )}
+                  <h3 className="text-[15px] font-semibold text-foreground">
+                    {childSectionTitle}
+                  </h3>
+                </div>
                 {subtasks.length > 0 && (
-                  <ChevronDown
-                    className={`w-4 h-4 text-muted-foreground transition-transform ${!isSubtasksOpen ? "-rotate-90" : ""} group-hover:text-foreground`}
-                  />
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        setIsSubtaskFormOpen(true);
+                        setTimeout(() => subtaskInputRef.current?.focus(), 0);
+                      }}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                    >
+                      <MoreHorizontal className="w-4 h-4" />
+                    </Button>
+                  </div>
                 )}
-                <h3 className="text-[15px] font-semibold text-foreground">
-                  Subtasks
-                </h3>
               </div>
-              {subtasks.length > 0 && (
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                    onClick={() => {
-                      setIsSubtaskFormOpen(true);
-                      setTimeout(() => subtaskInputRef.current?.focus(), 0);
-                    }}
-                  >
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                  >
-                    <MoreHorizontal className="w-4 h-4" />
-                  </Button>
-                </div>
-              )}
-            </div>
 
-            {subtasks.length > 0 && isSubtasksOpen && (
-              <>
-                <div className="flex items-center justify-end text-xs text-muted-foreground mb-1 font-medium">
-                  {progress}% Done
-                </div>
-                <div className="h-1.5 w-full bg-black/10 dark:bg-white/10 rounded-full mb-4 overflow-hidden">
-                  <div
-                    className="h-full bg-primary transition-all"
-                    style={{ width: `${progress}%` }}
-                  ></div>
-                </div>
-
-                <div className="border border-border/50 rounded-lg overflow-hidden text-[13px] bg-card">
-                  <div className="grid grid-cols-[1fr_120px_140px_100px] bg-muted/10 font-medium text-muted-foreground p-2 border-b border-border/50 text-xs">
-                    <div className="pl-2">Work</div>
-                    <div>Priority</div>
-                    <div>Assignee</div>
-                    <div>Status</div>
+              {subtasks.length > 0 && isSubtasksOpen && (
+                <>
+                  <div className="flex items-center justify-end text-xs text-muted-foreground mb-1 font-medium">
+                    {progress}% Done
+                  </div>
+                  <div className="h-1.5 w-full bg-black/10 dark:bg-white/10 rounded-full mb-4 overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{ width: `${progress}%` }}
+                    ></div>
                   </div>
 
-                  {subtasks.map((st) => (
-                    <div
-                      key={st.id}
-                      className="grid grid-cols-[1fr_120px_140px_100px] p-2 items-center hover:bg-muted/20 transition-colors border-b last:border-b-0 border-border/50 group"
-                    >
-                      <div className="flex items-center gap-2 pl-2 overflow-hidden pr-2">
-                        <ClipboardList className="w-4 h-4 text-primary shrink-0" />
-                        <span
-                          className={`font-semibold text-primary hover:underline cursor-pointer shrink-0 ${st.status === "done" ? "line-through opacity-70" : ""}`}
-                          onClick={() => onOpenTask?.(st)}
-                        >
-                          {st.code}
-                        </span>
-                        {editingSubtaskId === st.id ? (
-                          <input
-                            autoFocus
-                            value={editingSubtaskTitle}
-                            onChange={(e) =>
-                              setEditingSubtaskTitle(e.target.value)
-                            }
-                            onBlur={() => {
-                              if (
-                                editingSubtaskTitle.trim() &&
-                                editingSubtaskTitle !== st.title
-                              ) {
-                                updateTask({
-                                  taskId: st.id,
-                                  data: { title: editingSubtaskTitle.trim() },
-                                });
-                              }
-                              setEditingSubtaskId(null);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") e.currentTarget.blur();
-                              if (e.key === "Escape") setEditingSubtaskId(null);
-                            }}
-                            className="w-full h-[26px] px-1.5 bg-background border-2 border-primary rounded text-foreground focus:outline-none text-[13px]"
-                          />
-                        ) : (
-                          <div
-                            className="flex items-center flex-1 h-[26px] min-w-0 cursor-text border border-transparent hover:border-border hover:bg-muted/30 rounded px-1.5 transition-colors group/edit"
-                            onClick={() => {
-                              setEditingSubtaskTitle(st.title);
-                              setEditingSubtaskId(st.id);
-                            }}
+                  <div className="border border-border/50 rounded-lg overflow-hidden text-[13px] bg-card">
+                    <div className="grid grid-cols-[1fr_120px_140px_100px] bg-muted/10 font-medium text-muted-foreground p-2 border-b border-border/50 text-xs">
+                      <div className="pl-2">Work</div>
+                      <div>Priority</div>
+                      <div>Assignee</div>
+                      <div>Status</div>
+                    </div>
+
+                    {subtasks.map((st) => (
+                      <div
+                        key={st.id}
+                        className="grid grid-cols-[1fr_120px_140px_100px] p-2 items-center hover:bg-muted/20 transition-colors border-b last:border-b-0 border-border/50 group"
+                      >
+                        <div className="flex items-center gap-2 pl-2 overflow-hidden pr-2">
+                          {isEpic ? (
+                            <ClipboardList className="w-4 h-4 text-primary shrink-0" />
+                          ) : (
+                            <SquaresExclude className="w-4 h-4 text-cyan-500 shrink-0" />
+                          )}
+                          <span
+                            className={`font-semibold text-primary hover:underline cursor-pointer shrink-0 ${st.status === "done" ? "line-through opacity-70" : ""}`}
+                            onClick={() => onOpenTask?.(st)}
                           >
-                            <span
-                              className={`truncate flex-1 ${st.status === "done" ? "line-through opacity-70" : ""}`}
+                            {st.code}
+                          </span>
+                          {editingSubtaskId === st.id ? (
+                            <input
+                              autoFocus
+                              value={editingSubtaskTitle}
+                              onChange={(e) =>
+                                setEditingSubtaskTitle(e.target.value)
+                              }
+                              onBlur={() => {
+                                if (
+                                  editingSubtaskTitle.trim() &&
+                                  editingSubtaskTitle !== st.title
+                                ) {
+                                  updateTask({
+                                    taskId: st.id,
+                                    data: { title: editingSubtaskTitle.trim() },
+                                  });
+                                }
+                                setEditingSubtaskId(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") e.currentTarget.blur();
+                                if (e.key === "Escape")
+                                  setEditingSubtaskId(null);
+                              }}
+                              className="w-full h-[26px] px-1.5 bg-background border-2 border-primary rounded text-foreground focus:outline-none text-[13px]"
+                            />
+                          ) : (
+                            <div
+                              className="flex items-center flex-1 h-[26px] min-w-0 cursor-text border border-transparent hover:border-border hover:bg-muted/30 rounded px-1.5 transition-colors group/edit"
+                              onClick={() => {
+                                setEditingSubtaskTitle(st.title);
+                                setEditingSubtaskId(st.id);
+                              }}
                             >
-                              {st.title}
-                            </span>
-                            <Pencil className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover/edit:opacity-100 ml-2 shrink-0 transition-opacity" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 text-muted-foreground capitalize">
-                        <PriorityIcon priority={st.priority} />
-                        {st.priority}
-                      </div>
-                      <div className="flex items-center min-w-0 pr-2">
-                        <Popover
-                          open={openAssigneePopover === st.id}
-                          onOpenChange={(o) =>
-                            setOpenAssigneePopover(o ? st.id : null)
-                          }
-                        >
-                          <PopoverTrigger asChild>
-                            <button className="flex items-center gap-1.5 text-muted-foreground hover:bg-muted/50 hover:text-foreground px-1.5 py-1 rounded border border-transparent hover:border-border/50 transition-colors w-full text-left min-w-0">
-                              {st.assignee ? (
-                                <>
-                                  <img
-                                    src={st.assignee.avatarUrl}
-                                    alt=""
-                                    className="w-5 h-5 rounded-full border border-border shrink-0"
-                                  />
-                                  <span className="truncate">
-                                    {st.assignee.name}
-                                  </span>
-                                </>
-                              ) : (
-                                <>
-                                  <div className="h-5 w-5 rounded-full border border-dashed border-muted-foreground/40 flex items-center justify-center bg-muted/20 shrink-0">
-                                    <svg
-                                      className="w-3 h-3 text-muted-foreground/60"
-                                      fill="none"
-                                      viewBox="0 0 24 24"
-                                      stroke="currentColor"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                                      />
-                                    </svg>
-                                  </div>
-                                  <span className="truncate">Unassigned</span>
-                                </>
-                              )}
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-52 p-0" align="start">
-                            <Command>
-                              <CommandInput
-                                placeholder="Search assignee..."
-                                className="h-9"
-                              />
-                              <CommandList>
-                                <CommandEmpty>No user found.</CommandEmpty>
-                                <CommandGroup>
-                                  <CommandItem
-                                    onSelect={() => {
-                                      updateTask({
-                                        taskId: st.id,
-                                        data: { assigneeId: null },
-                                      });
-                                      setOpenAssigneePopover(null);
-                                    }}
-                                    className="gap-2 cursor-pointer"
-                                  >
-                                    <div className="h-6 w-6 rounded-full border border-dashed border-muted-foreground/40 flex items-center justify-center bg-muted/20 shrink-0">
+                              <span
+                                className={`truncate flex-1 ${st.status === "done" ? "line-through opacity-70" : ""}`}
+                              >
+                                {st.title}
+                              </span>
+                              <Pencil className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover/edit:opacity-100 ml-2 shrink-0 transition-opacity" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-muted-foreground capitalize">
+                          <PriorityIcon priority={st.priority} />
+                          {st.priority}
+                        </div>
+                        <div className="flex items-center min-w-0 pr-2">
+                          <Popover
+                            open={openAssigneePopover === st.id}
+                            onOpenChange={(o) =>
+                              setOpenAssigneePopover(o ? st.id : null)
+                            }
+                          >
+                            <PopoverTrigger asChild>
+                              <button className="flex items-center gap-1.5 text-muted-foreground hover:bg-muted/50 hover:text-foreground px-1.5 py-1 rounded border border-transparent hover:border-border/50 transition-colors w-full text-left min-w-0">
+                                {st.assignee ? (
+                                  <>
+                                    <img
+                                      src={st.assignee.avatarUrl}
+                                      alt=""
+                                      className="w-5 h-5 rounded-full border border-border shrink-0"
+                                    />
+                                    <span className="truncate">
+                                      {st.assignee.name}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="h-5 w-5 rounded-full border border-dashed border-muted-foreground/40 flex items-center justify-center bg-muted/20 shrink-0">
                                       <svg
                                         className="w-3 h-3 text-muted-foreground/60"
                                         fill="none"
@@ -714,187 +702,198 @@ export function TaskMain({
                                         />
                                       </svg>
                                     </div>
-                                    Unassigned
-                                  </CommandItem>
-                                  {mockUsers.map((user) => (
+                                    <span className="truncate">Unassigned</span>
+                                  </>
+                                )}
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-52 p-0" align="start">
+                              <Command>
+                                <CommandInput
+                                  placeholder="Search assignee..."
+                                  className="h-9"
+                                />
+                                <CommandList>
+                                  <CommandEmpty>No user found.</CommandEmpty>
+                                  <CommandGroup>
                                     <CommandItem
-                                      key={user.id}
                                       onSelect={() => {
                                         updateTask({
                                           taskId: st.id,
-                                          data: { assigneeId: user.id },
+                                          data: { assigneeId: null },
                                         });
                                         setOpenAssigneePopover(null);
                                       }}
                                       className="gap-2 cursor-pointer"
                                     >
-                                      <Avatar className="h-6 w-6">
-                                        <AvatarImage src={user.avatarUrl} />
-                                        <AvatarFallback>
-                                          {user.name.charAt(0)}
-                                        </AvatarFallback>
-                                      </Avatar>
-                                      <span className="truncate">
-                                        {user.name}
-                                      </span>
+                                      <div className="h-6 w-6 rounded-full border border-dashed border-muted-foreground/40 flex items-center justify-center bg-muted/20 shrink-0">
+                                        <svg
+                                          className="w-3 h-3 text-muted-foreground/60"
+                                          fill="none"
+                                          viewBox="0 0 24 24"
+                                          stroke="currentColor"
+                                        >
+                                          <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                                          />
+                                        </svg>
+                                      </div>
+                                      Unassigned
                                     </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                      <div>
-                        <Popover
-                          open={openStatusPopover === st.id}
-                          onOpenChange={(o) =>
-                            setOpenStatusPopover(o ? st.id : null)
-                          }
-                        >
-                          <PopoverTrigger asChild>
-                            <button
-                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded w-fit uppercase border flex items-center gap-1 transition-colors ${st.status === "done" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25" : st.status === "in-progress" ? "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30 hover:bg-blue-500/25" : st.status === "review" ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 border-yellow-500/30 hover:bg-yellow-500/25" : "bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30 hover:bg-violet-500/25"}`}
-                            >
-                              {st.status.replace("-", " ")}{" "}
-                              <ChevronDown className="w-3 h-3 opacity-70" />
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent
-                            className="w-40 p-1 flex flex-col gap-0.5"
-                            align="start"
+                                    {mockUsers.map((user) => (
+                                      <CommandItem
+                                        key={user.id}
+                                        onSelect={() => {
+                                          updateTask({
+                                            taskId: st.id,
+                                            data: { assigneeId: user.id },
+                                          });
+                                          setOpenAssigneePopover(null);
+                                        }}
+                                        className="gap-2 cursor-pointer"
+                                      >
+                                        <Avatar className="h-6 w-6">
+                                          <AvatarImage src={user.avatarUrl} />
+                                          <AvatarFallback>
+                                            {user.name.charAt(0)}
+                                          </AvatarFallback>
+                                        </Avatar>
+                                        <span className="truncate">
+                                          {user.name}
+                                        </span>
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                        <div>
+                          <Popover
+                            open={openStatusPopover === st.id}
+                            onOpenChange={(o) =>
+                              setOpenStatusPopover(o ? st.id : null)
+                            }
                           >
-                            <button
-                              className="px-2 py-1.5 rounded-sm hover:bg-muted text-[10px] font-bold text-left transition-colors flex items-center"
-                              onClick={() => {
-                                updateTask({
-                                  taskId: st.id,
-                                  data: { status: "todo" },
-                                });
-                                setOpenStatusPopover(null);
-                              }}
+                            <PopoverTrigger asChild>
+                              <button
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded w-fit uppercase border flex items-center gap-1 transition-colors ${st.status === "done" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25" : st.status === "in-progress" ? "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30 hover:bg-blue-500/25" : st.status === "review" ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 border-yellow-500/30 hover:bg-yellow-500/25" : "bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30 hover:bg-violet-500/25"}`}
+                              >
+                                {st.status.replace("-", " ")}{" "}
+                                <ChevronDown className="w-3 h-3 opacity-70" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              className="w-40 p-1 flex flex-col gap-0.5"
+                              align="start"
                             >
-                              <span className="bg-violet-500/15 text-violet-700 dark:text-violet-300 px-1.5 py-0.5 rounded uppercase border border-violet-500/30">
-                                TO DO
-                              </span>
-                            </button>
-                            <button
-                              className="px-2 py-1.5 rounded-sm hover:bg-muted text-[10px] font-bold text-left transition-colors flex items-center"
-                              onClick={() => {
-                                updateTask({
-                                  taskId: st.id,
-                                  data: { status: "in-progress" },
-                                });
-                                setOpenStatusPopover(null);
-                              }}
-                            >
-                              <span className="bg-blue-500/15 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded uppercase border border-blue-500/30">
-                                IN PROGRESS
-                              </span>
-                            </button>
-                            <button
-                              className="px-2 py-1.5 rounded-sm hover:bg-muted text-[10px] font-bold text-left transition-colors flex items-center"
-                              onClick={() => {
-                                updateTask({
-                                  taskId: st.id,
-                                  data: { status: "review" },
-                                });
-                                setOpenStatusPopover(null);
-                              }}
-                            >
-                              <span className="bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 px-1.5 py-0.5 rounded uppercase border border-yellow-500/30">
-                                REVIEW
-                              </span>
-                            </button>
-                            <button
-                              className="px-2 py-1.5 rounded-sm hover:bg-muted text-[10px] font-bold text-left transition-colors flex items-center"
-                              onClick={() => {
-                                updateTask({
-                                  taskId: st.id,
-                                  data: { status: "done" },
-                                });
-                                setOpenStatusPopover(null);
-                              }}
-                            >
-                              <span className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded uppercase border border-emerald-500/30">
-                                DONE
-                              </span>
-                            </button>
-                            <div className="h-px bg-border/50 my-1"></div>
-                            <button className="px-2 py-1.5 rounded-sm hover:bg-muted text-[12px] font-medium text-left transition-colors">
-                              View workflow
-                            </button>
-                          </PopoverContent>
-                        </Popover>
+                              <button
+                                className="px-2 py-1.5 rounded-sm hover:bg-muted text-[10px] font-bold text-left transition-colors flex items-center"
+                                onClick={() => {
+                                  updateTask({
+                                    taskId: st.id,
+                                    data: { status: "todo" },
+                                  });
+                                  setOpenStatusPopover(null);
+                                }}
+                              >
+                                <span className="bg-violet-500/15 text-violet-700 dark:text-violet-300 px-1.5 py-0.5 rounded uppercase border border-violet-500/30">
+                                  TO DO
+                                </span>
+                              </button>
+                              <button
+                                className="px-2 py-1.5 rounded-sm hover:bg-muted text-[10px] font-bold text-left transition-colors flex items-center"
+                                onClick={() => {
+                                  updateTask({
+                                    taskId: st.id,
+                                    data: { status: "in-progress" },
+                                  });
+                                  setOpenStatusPopover(null);
+                                }}
+                              >
+                                <span className="bg-blue-500/15 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded uppercase border border-blue-500/30">
+                                  IN PROGRESS
+                                </span>
+                              </button>
+                              <button
+                                className="px-2 py-1.5 rounded-sm hover:bg-muted text-[10px] font-bold text-left transition-colors flex items-center"
+                                onClick={() => {
+                                  updateTask({
+                                    taskId: st.id,
+                                    data: { status: "review" },
+                                  });
+                                  setOpenStatusPopover(null);
+                                }}
+                              >
+                                <span className="bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 px-1.5 py-0.5 rounded uppercase border border-yellow-500/30">
+                                  REVIEW
+                                </span>
+                              </button>
+                              <button
+                                className="px-2 py-1.5 rounded-sm hover:bg-muted text-[10px] font-bold text-left transition-colors flex items-center"
+                                onClick={() => {
+                                  updateTask({
+                                    taskId: st.id,
+                                    data: { status: "done" },
+                                  });
+                                  setOpenStatusPopover(null);
+                                }}
+                              >
+                                <span className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded uppercase border border-emerald-500/30">
+                                  DONE
+                                </span>
+                              </button>
+                              <div className="h-px bg-border/50 my-1"></div>
+                              <button className="px-2 py-1.5 rounded-sm hover:bg-muted text-[12px] font-medium text-left transition-colors">
+                                View workflow
+                              </button>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Empty Subtasks Placeholder */}
+              {subtasks.length === 0 && !isSubtaskFormOpen && (
+                <div
+                  className="text-[13px] text-muted-foreground hover:text-foreground cursor-pointer transition-colors w-fit"
+                  onClick={() => {
+                    setIsSubtaskFormOpen(true);
+                    setTimeout(() => subtaskInputRef.current?.focus(), 0);
+                  }}
+                >
+                  {addChildLabel}
                 </div>
-              </>
-            )}
+              )}
 
-            {/* Empty Subtasks Placeholder */}
-            {subtasks.length === 0 && !isSubtaskFormOpen && (
-              <div
-                className="text-[13px] text-muted-foreground hover:text-foreground cursor-pointer transition-colors w-fit"
-                onClick={() => {
-                  setIsSubtaskFormOpen(true);
-                  setTimeout(() => subtaskInputRef.current?.focus(), 0);
-                }}
-              >
-                Add subtask
-              </div>
-            )}
-
-            {isSubtaskFormOpen && (
-              <div className="mt-2 flex flex-col gap-2">
-                <div className="flex items-center border border-primary/60 ring-1 ring-primary/20 rounded-md bg-background px-3 py-1.5 focus-within:ring-2 focus-within:ring-primary/50 transition-shadow">
-                  <input
-                    placeholder="Name this subtask"
-                    className="flex-1 bg-transparent outline-none text-[13px] h-6 text-foreground placeholder:text-muted-foreground"
-                    value={subtaskTitle}
-                    onChange={(e) => setSubtaskTitle(e.target.value)}
-                    ref={subtaskInputRef}
-                    autoFocus={false}
-                    onKeyDown={(e) => {
-                      if (
-                        e.key === "Enter" &&
-                        subtaskTitle.trim() &&
-                        !isCreatingSubtask
-                      ) {
-                        createSubtask(
-                          {
-                            title: subtaskTitle.trim(),
-                            projectId: task.projectId,
-                            type: "task",
-                            status: "todo",
-                            priority: "medium",
-                            parentId: task.id,
-                          },
-                          {
-                            onSuccess: () => {
-                              setSubtaskTitle("");
-                            },
-                          },
-                        );
-                      }
-                    }}
-                  />
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1.5 px-2 py-1 bg-muted/50 rounded text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground">
-                      <ClipboardList className="w-3.5 h-3.5" /> Subtask{" "}
-                      <ChevronDown className="w-3 h-3" />
-                    </div>
-                    <button
-                      className={`p-1 rounded transition-colors cursor-pointer disabled:cursor-not-allowed ${subtaskTitle.trim() ? "bg-primary text-primary-foreground hover:bg-primary/90" : "hover:bg-muted text-muted-foreground hover:text-foreground"}`}
-                      disabled={!subtaskTitle.trim() || isCreatingSubtask}
-                      onClick={() => {
-                        if (subtaskTitle.trim() && !isCreatingSubtask) {
+              {isSubtaskFormOpen && (
+                <div className="mt-2 flex flex-col gap-2">
+                  <div className="flex items-center border border-primary/60 ring-1 ring-primary/20 rounded-md bg-background px-3 py-1.5 focus-within:ring-2 focus-within:ring-primary/50 transition-shadow">
+                    <input
+                      placeholder={childInputPlaceholder}
+                      className="flex-1 bg-transparent outline-none text-[13px] h-6 text-foreground placeholder:text-muted-foreground"
+                      value={subtaskTitle}
+                      onChange={(e) => setSubtaskTitle(e.target.value)}
+                      ref={subtaskInputRef}
+                      autoFocus={false}
+                      onKeyDown={(e) => {
+                        if (
+                          e.key === "Enter" &&
+                          subtaskTitle.trim() &&
+                          !isCreatingSubtask
+                        ) {
                           createSubtask(
                             {
                               title: subtaskTitle.trim(),
                               projectId: task.projectId,
-                              type: "task",
+                              type: isEpic ? childWorkType : "task",
                               status: "todo",
                               priority: "medium",
                               parentId: task.id,
@@ -907,44 +906,105 @@ export function TaskMain({
                           );
                         }
                       }}
-                    >
-                      {isCreatingSubtask ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    />
+                    <div className="flex items-center gap-2">
+                      {isEpic ? (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button className="flex items-center gap-1.5 px-2 py-1 bg-muted/50 rounded text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground">
+                              {childWorkType === "bug" ? (
+                                <Bug className="w-3.5 h-3.5 text-red-500" />
+                              ) : (
+                                <ClipboardList className="w-3.5 h-3.5" />
+                              )}
+                              {childWorkType === "bug" ? "Bug" : "Task"}
+                              <ChevronDown className="w-3 h-3" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-36 p-1" align="end">
+                            <button
+                              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted"
+                              onClick={() => setChildWorkType("task")}
+                            >
+                              <ClipboardList className="w-3.5 h-3.5 text-primary" />
+                              Task
+                            </button>
+                            <button
+                              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted"
+                              onClick={() => setChildWorkType("bug")}
+                            >
+                              <Bug className="w-3.5 h-3.5 text-red-500" />
+                              Bug
+                            </button>
+                          </PopoverContent>
+                        </Popover>
                       ) : (
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polyline points="9 10 4 15 9 20"></polyline>
-                          <path d="M20 4v7a4 4 0 0 1-4 4H4"></path>
-                        </svg>
+                        <div className="flex items-center gap-1.5 px-2 py-1 bg-muted/50 rounded text-xs font-medium text-muted-foreground">
+                          <SquaresExclude className="w-3.5 h-3.5" />
+                          {childTypeLabel}
+                        </div>
                       )}
+                      <button
+                        className={`p-1 rounded transition-colors cursor-pointer disabled:cursor-not-allowed ${subtaskTitle.trim() ? "bg-primary text-primary-foreground hover:bg-primary/90" : "hover:bg-muted text-muted-foreground hover:text-foreground"}`}
+                        disabled={!subtaskTitle.trim() || isCreatingSubtask}
+                        onClick={() => {
+                          if (subtaskTitle.trim() && !isCreatingSubtask) {
+                            createSubtask(
+                              {
+                                title: subtaskTitle.trim(),
+                                projectId: task.projectId,
+                                type: isEpic ? childWorkType : "task",
+                                status: "todo",
+                                priority: "medium",
+                                parentId: task.id,
+                              },
+                              {
+                                onSuccess: () => {
+                                  setSubtaskTitle("");
+                                },
+                              },
+                            );
+                          }
+                        }}
+                      >
+                        {isCreatingSubtask ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <polyline points="9 10 4 15 9 20"></polyline>
+                            <path d="M20 4v7a4 4 0 0 1-4 4H4"></path>
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between mt-1 px-1">
+                    <button className="flex items-center gap-1.5 text-[13px] text-primary hover:underline font-medium transition-colors">
+                      <Search className="w-3.5 h-3.5" /> Choose existing
+                    </button>
+                    <button
+                      className="text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => {
+                        setSubtaskTitle("");
+                        setIsSubtaskFormOpen(false);
+                      }}
+                    >
+                      Cancel
                     </button>
                   </div>
                 </div>
-                <div className="flex items-center justify-between mt-1 px-1">
-                  <button className="flex items-center gap-1.5 text-[13px] text-primary hover:underline font-medium transition-colors">
-                    <Search className="w-3.5 h-3.5" /> Choose existing
-                  </button>
-                  <button
-                    className="text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-                    onClick={() => {
-                      setSubtaskTitle("");
-                      setIsSubtaskFormOpen(false);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           <LinkedWorkSection />
 

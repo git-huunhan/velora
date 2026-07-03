@@ -7,6 +7,10 @@ import {
   TASK_ORDER_GAP,
 } from "../model/taskOrder";
 import { logActivity } from "./commentsApi";
+import {
+  validateParentAssignment,
+  validateTaskDeletion,
+} from "../model/taskHierarchy";
 
 const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
@@ -22,20 +26,27 @@ let tasksDb: Task[] = Array.from({ length: 60 }).map((_, i) => {
     id: `task-${i + 1}`,
     code: `${getProjectKeySync(projectId)}-${i + 101}`,
     projectId,
-    title: [
-      "Design homepage mockup",
-      "Set up CI/CD pipeline",
-      "Write unit tests",
-      "Fix authentication bug",
-      "Implement dark mode",
-      "Review pull requests",
-      "Update API documentation",
-      "Optimize database queries",
-      "Deploy to staging",
-      "User research interviews",
-    ][i % 10],
+    title:
+      i === 0
+        ? "Project 1 delivery"
+        : i === 24
+          ? "Build Project 1 workspace"
+          : i === 48
+            ? "Validate Project 1 workflow"
+            : [
+                "Design homepage mockup",
+                "Set up CI/CD pipeline",
+                "Write unit tests",
+                "Fix authentication bug",
+                "Implement dark mode",
+                "Review pull requests",
+                "Update API documentation",
+                "Optimize database queries",
+                "Deploy to staging",
+                "User research interviews",
+              ][i % 10],
     description: `Description for task ${i + 1}`,
-    type: i === 1 || i === 5 ? "epic" : i % 4 === 0 ? "bug" : "task",
+    type: i < 24 ? "epic" : "task",
     status: STATUSES[i % 4],
     priority: PRIORITIES[i % 3],
     order: (Math.floor(i / 24) + 1) * TASK_ORDER_GAP,
@@ -45,9 +56,33 @@ let tasksDb: Task[] = Array.from({ length: 60 }).map((_, i) => {
       : undefined,
     labels: i % 2 === 0 ? ["Frontend"] : [],
     dueDate: new Date(Date.now() + i * 86400000).toISOString().split("T")[0],
-    parentId: i > 5 && i % 3 === 0 ? "task-2" : undefined, // task-2 is an epic (i=1)
+    parentId:
+      i >= 48 ? `task-${i - 23}` : i >= 24 ? `task-${(i % 24) + 1}` : undefined,
     createdAt: new Date(Date.now() - i * 86400000).toISOString().split("T")[0],
   };
+});
+
+const projectOneAssignee = mockUsers[0];
+tasksDb.push({
+  id: "task-61",
+  code: `${getProjectKeySync("proj-1")}-161`,
+  projectId: "proj-1",
+  title: "Fix standalone Project 1 defect",
+  description: "A standalone bug that is not attached to an Epic or task.",
+  type: "bug",
+  status: "todo",
+  priority: "high",
+  order: 4 * TASK_ORDER_GAP,
+  assigneeId: projectOneAssignee?.id,
+  assignee: projectOneAssignee
+    ? {
+        id: projectOneAssignee.id,
+        name: projectOneAssignee.name,
+        avatarUrl: projectOneAssignee.avatarUrl || "",
+      }
+    : undefined,
+  labels: ["Bug"],
+  createdAt: new Date().toISOString().split("T")[0],
 });
 
 export async function getTasksByProjectId(projectId: string): Promise<Task[]> {
@@ -152,6 +187,13 @@ export async function createTask(
       : undefined,
     createdAt: new Date().toISOString().split("T")[0],
   };
+
+  const parentValidation = validateParentAssignment(
+    newTask,
+    newTask.parentId,
+    tasksDb,
+  );
+  if (!parentValidation.valid) throw new Error(parentValidation.reason);
 
   if (afterTaskId) {
     const index = tasksDb.findIndex((t) => t.id === afterTaskId);
@@ -285,11 +327,24 @@ export async function updateTask(
     updatedTask.parentId = nextParentId ?? undefined;
   }
 
+  if (nextParentId !== undefined || data.type !== undefined) {
+    const parentValidation = validateParentAssignment(
+      { ...task, ...taskFields },
+      updatedTask.parentId,
+      tasksDb,
+    );
+    if (!parentValidation.valid) throw new Error(parentValidation.reason);
+  }
+
   tasksDb[taskIndex] = updatedTask;
   return updatedTask;
 }
 
 export async function deleteTask(taskId: string): Promise<void> {
   await delay(300);
+  const task = tasksDb.find((candidate) => candidate.id === taskId);
+  if (!task) throw new Error("Task not found");
+  const deletionValidation = validateTaskDeletion(task, tasksDb);
+  if (!deletionValidation.valid) throw new Error(deletionValidation.reason);
   tasksDb = tasksDb.filter((t) => t.id !== taskId);
 }
