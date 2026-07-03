@@ -262,7 +262,7 @@ export function KanbanBoard({
     null,
   );
   const [columnDropIndicator, setColumnDropIndicator] = useState<{
-    columnId: TaskStatus;
+    instanceKey: string;
     side: "before" | "after";
   } | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -677,7 +677,10 @@ export function KanbanBoard({
     }
   };
 
-  const getColumnManagementProps = (column: (typeof columns)[number]) => ({
+  const getColumnManagementProps = (
+    column: (typeof columns)[number],
+    instanceKey: string,
+  ) => ({
     column,
     columns,
     onRenameColumn: (title: string) =>
@@ -709,6 +712,7 @@ export function KanbanBoard({
       toast.success("Column deleted");
     },
     onColumnDragStart: () => setDraggedColumnId(column.id),
+    canReorderColumn: groupBy === "None",
     isColumnDragging: draggedColumnId !== null,
     onColumnDragEnd: () => {
       setDraggedColumnId(null);
@@ -728,10 +732,10 @@ export function KanbanBoard({
         setColumnDropIndicator(null);
         return;
       }
-      setColumnDropIndicator({ columnId: column.id, side });
+      setColumnDropIndicator({ instanceKey, side });
     },
     dropIndicatorSide:
-      columnDropIndicator?.columnId === column.id
+      columnDropIndicator?.instanceKey === instanceKey
         ? columnDropIndicator.side
         : null,
     onColumnDrop: (side: "before" | "after") => {
@@ -919,7 +923,10 @@ export function KanbanBoard({
                               );
                               return (
                                 <BoardColumn
-                                  {...getColumnManagementProps(col)}
+                                  {...getColumnManagementProps(
+                                    col,
+                                    `${col.id}___${groupId}`,
+                                  )}
                                   key={`${col.id}___${groupId}`}
                                   columnId={col.id}
                                   droppableId={`${col.id}___${groupId}`}
@@ -958,7 +965,10 @@ export function KanbanBoard({
                             );
                             return (
                               <BoardColumn
-                                {...getColumnManagementProps(col)}
+                                {...getColumnManagementProps(
+                                  col,
+                                  `${col.id}___${groupId}`,
+                                )}
                                 key={`${col.id}___${groupId}`}
                                 columnId={col.id}
                                 droppableId={`${col.id}___${groupId}`}
@@ -992,7 +1002,10 @@ export function KanbanBoard({
                           );
                           return (
                             <BoardColumn
-                              {...getColumnManagementProps(col)}
+                              {...getColumnManagementProps(
+                                col,
+                                `${col.id}___ungrouped`,
+                              )}
                               key={`${col.id}___ungrouped`}
                               columnId={col.id}
                               droppableId={`${col.id}___ungrouped`}
@@ -1021,7 +1034,7 @@ export function KanbanBoard({
                 );
                 return (
                   <BoardColumn
-                    {...getColumnManagementProps(col)}
+                    {...getColumnManagementProps(col, col.id)}
                     key={col.id}
                     columnId={col.id}
                     droppableId={col.id}

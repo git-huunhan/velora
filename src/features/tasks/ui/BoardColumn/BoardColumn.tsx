@@ -31,6 +31,7 @@ interface BoardColumnProps {
   onDeleteColumn: (targetColumnId?: string) => Promise<void>;
   onColumnDragStart: () => void;
   onColumnDragEnd: () => void;
+  canReorderColumn: boolean;
   isColumnDragging: boolean;
   onColumnDragOver: (side: "before" | "after") => void;
   onColumnDrop: (side: "before" | "after") => void;
@@ -61,6 +62,7 @@ export function BoardColumn({
   onDeleteColumn,
   onColumnDragStart,
   onColumnDragEnd,
+  canReorderColumn,
   isColumnDragging,
   onColumnDragOver,
   onColumnDrop,
@@ -129,8 +131,12 @@ export function BoardColumn({
         )}
       </div>
       <div
-        draggable={!isRenaming}
+        draggable={canReorderColumn && !isRenaming}
         onDragStart={(event) => {
+          if (!canReorderColumn) {
+            event.preventDefault();
+            return;
+          }
           const target = event.target as HTMLElement;
           if (target.closest("button, input, [role='menuitem']")) {
             event.preventDefault();
@@ -141,7 +147,7 @@ export function BoardColumn({
           requestAnimationFrame(onColumnDragStart);
         }}
         onDragEnd={onColumnDragEnd}
-        className="flex cursor-grab items-center justify-between border-b px-4 py-3 active:cursor-grabbing"
+        className={`flex items-center justify-between border-b px-4 py-3 ${canReorderColumn ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
       >
         <div className="flex min-w-0 items-center gap-2">
           {isRenaming ? (
