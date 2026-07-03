@@ -131,11 +131,16 @@ Accessible, unstyled primitives with full control over styling. Components are c
 
 ## 🗺 Roadmap
 
-This is the frontend (`velora-web`) of a planned multi-repo project:
+Velora is evolving into a monorepo so its applications can share contracts,
+tooling, and release workflows:
 
-- [x] `velora` — Frontend dashboard (this repo)
-- [ ] `velora-api` — REST API backend (Node.js / NestJS)
-- [ ] `velora-admin` — Internal admin panel
+- [x] `apps/web` — React frontend dashboard (currently at the repository root)
+- [ ] `apps/api` — REST API backend (Node.js / NestJS)
+- [ ] `apps/admin` — Internal admin panel
+- [ ] `packages/*` — Shared contracts, configuration, and reusable packages
+
+The frontend will move into `apps/web` as part of the monorepo migration. Each
+application remains independently buildable and deployable.
 
 ---
 
