@@ -7,6 +7,10 @@ import {
 import { ApiErrorResponse } from '../common/contracts/api-error.contract';
 import { PaginationMeta } from '../common/contracts/pagination.contract';
 import {
+  AuthResponse,
+  AuthTokensResponse,
+} from '../auth/contracts/auth.contract';
+import {
   ActivityResponse,
   CommentResponse,
   KanbanColumnResponse,
@@ -25,12 +29,15 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
     .setTitle('Velora API')
     .setDescription('REST API contracts for the Velora workspace platform.')
     .setVersion('1.0')
+    .addBearerAuth()
     .build();
 
   return SwaggerModule.createDocument(app, config, {
     extraModels: [
       ActivityResponse,
       ApiErrorResponse,
+      AuthResponse,
+      AuthTokensResponse,
       CommentResponse,
       KanbanColumnResponse,
       MoveColumnDto,

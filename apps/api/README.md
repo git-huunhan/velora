@@ -28,6 +28,13 @@ npm run dev:api
 The versioned health endpoint is available at
 `http://localhost:3000/api/v1/health`.
 
+After seeding, the local admin account can be used for auth endpoint checks:
+
+```text
+email: admin@velora.local
+password: Password123!
+```
+
 Interactive OpenAPI documentation is available at
 `http://localhost:3000/api/docs`. The raw contract is exposed as JSON at
 `http://localhost:3000/api/docs-json` and YAML at
@@ -42,6 +49,15 @@ Interactive OpenAPI documentation is available at
 - IDs use UUIDs and timestamps use ISO 8601 strings.
 - Errors use a stable `{ statusCode, code, message, details?, timestamp, path }`
   response.
+
+## Authentication
+
+- Password auth lives under `/api/v1/auth`.
+- Access tokens are JWT bearer tokens.
+- Refresh tokens are opaque random values and only their SHA-256 hashes are
+  stored.
+- Refreshing rotates the refresh token and revokes the previous session.
+- `GET /api/v1/auth/me` returns the current `UserResponse`.
 
 ## Domain contracts
 

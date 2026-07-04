@@ -1,5 +1,7 @@
 import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { randomBytes, scrypt as scryptCallback } from 'node:crypto';
+import { promisify } from 'node:util';
 import {
   PrismaClient,
   ProjectStatus,
@@ -18,6 +20,13 @@ if (!connectionString) {
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString }),
 });
+const scrypt = promisify(scryptCallback);
+
+async function hashPassword(password: string): Promise<string> {
+  const salt = randomBytes(16).toString('base64url');
+  const derivedKey = (await scrypt(password, salt, 64)) as Buffer;
+  return `scrypt:${salt}:${derivedKey.toString('base64url')}`;
+}
 
 const ids = {
   user: '00000000-0000-4000-8000-000000000001',
@@ -35,18 +44,22 @@ const ids = {
 } as const;
 
 async function seed(): Promise<void> {
+  const adminPasswordHash = await hashPassword('Password123!');
+
   await prisma.$transaction(async (tx) => {
     await tx.user.upsert({
       where: { id: ids.user },
       update: {
         displayName: 'Admin Pro',
         email: 'admin@velora.local',
+        passwordHash: adminPasswordHash,
         role: UserRole.ADMIN,
       },
       create: {
         id: ids.user,
         displayName: 'Admin Pro',
         email: 'admin@velora.local',
+        passwordHash: adminPasswordHash,
         role: UserRole.ADMIN,
       },
     });
