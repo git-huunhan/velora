@@ -28,6 +28,21 @@ npm run dev:api
 The versioned health endpoint is available at
 `http://localhost:3000/api/v1/health`.
 
+Interactive OpenAPI documentation is available at
+`http://localhost:3000/api/docs`. The raw contract is exposed as JSON at
+`http://localhost:3000/api/docs-json` and YAML at
+`http://localhost:3000/api/docs-yaml`.
+
+## API standards
+
+- Versioned REST routes use the `/api/v1` prefix.
+- DTOs reject unknown properties and transform validated query values.
+- Pagination uses `page` and `limit` with a maximum page size of 100.
+- Sort expressions use `field:asc` or `field:desc`.
+- IDs use UUIDs and timestamps use ISO 8601 strings.
+- Errors use a stable `{ statusCode, code, message, details?, timestamp, path }`
+  response.
+
 ## Commands
 
 ```bash
