@@ -62,6 +62,8 @@ npm run build:api
 npm run lint:api
 npm run test:api
 npm run test:api:e2e
+npm run test:api:integration
+npm run contract:api
 npm run db:generate
 npm run db:migrate
 npm run db:seed
@@ -70,3 +72,8 @@ npm run db:studio
 
 Database migrations are committed under `prisma/migrations`. Generated Prisma
 Client files are intentionally ignored and recreated during builds.
+
+Integration tests automatically create and migrate `velora_test`. A custom
+`DATABASE_URL_TEST` is accepted only when its database name ends in `_test`.
+`contract:api` writes an ignored `apps/api/openapi.json` snapshot for client
+generation and contract compatibility checks.

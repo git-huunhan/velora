@@ -29,3 +29,4 @@ dist-ssr
 # Project specifics
 documentation/
 apps/api/src/generated/
+apps/api/openapi.json

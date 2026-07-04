@@ -18,6 +18,8 @@
     "lint:api": "npm run lint --workspace @velora/api",
     "test:api": "npm run test --workspace @velora/api",
     "test:api:e2e": "npm run test:e2e --workspace @velora/api",
+    "test:api:integration": "npm run test:integration --workspace @velora/api",
+    "contract:api": "npm run contract:generate --workspace @velora/api",
     "db:generate": "npm run db:generate --workspace @velora/api",
     "db:migrate": "npm run db:migrate --workspace @velora/api",
     "db:seed": "npm run db:seed --workspace @velora/api",
