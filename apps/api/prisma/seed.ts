@@ -2,8 +2,11 @@ import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import {
   PrismaClient,
+  ProjectStatus,
   ProjectRole,
+  TaskPriority,
   TaskType,
+  UserRole,
 } from '../src/generated/prisma/client';
 
 const connectionString = process.env.DATABASE_URL;
@@ -27,6 +30,8 @@ const ids = {
   task: '00000000-0000-4000-8000-000000000302',
   subtask: '00000000-0000-4000-8000-000000000303',
   bug: '00000000-0000-4000-8000-000000000304',
+  comment: '00000000-0000-4000-8000-000000000401',
+  activity: '00000000-0000-4000-8000-000000000501',
 } as const;
 
 async function seed(): Promise<void> {
@@ -36,18 +41,31 @@ async function seed(): Promise<void> {
       update: {
         displayName: 'Admin Pro',
         email: 'admin@velora.local',
+        role: UserRole.ADMIN,
       },
       create: {
         id: ids.user,
         displayName: 'Admin Pro',
         email: 'admin@velora.local',
+        role: UserRole.ADMIN,
       },
     });
 
     await tx.project.upsert({
       where: { id: ids.project },
-      update: { key: 'PRJ1', name: 'Project 1' },
-      create: { id: ids.project, key: 'PRJ1', name: 'Project 1' },
+      update: {
+        description: 'Core workspace delivery',
+        key: 'PRJ1',
+        name: 'Project 1',
+        status: ProjectStatus.ACTIVE,
+      },
+      create: {
+        description: 'Core workspace delivery',
+        id: ids.project,
+        key: 'PRJ1',
+        name: 'Project 1',
+        status: ProjectStatus.ACTIVE,
+      },
     });
 
     await tx.task.deleteMany({ where: { projectId: ids.project } });
@@ -72,7 +90,13 @@ async function seed(): Promise<void> {
           rank: 'a1',
         },
         { id: ids.review, projectId: ids.project, name: 'Review', rank: 'a2' },
-        { id: ids.done, projectId: ids.project, name: 'Done', rank: 'a3' },
+        {
+          id: ids.done,
+          projectId: ids.project,
+          name: 'Done',
+          rank: 'a3',
+          isDone: true,
+        },
       ],
     });
 
@@ -84,6 +108,8 @@ async function seed(): Promise<void> {
         code: 'PRJ1-101',
         title: 'Project 1 delivery',
         type: TaskType.EPIC,
+        priority: TaskPriority.MEDIUM,
+        reporterId: ids.user,
         rank: 'a0',
       },
     });
@@ -97,6 +123,11 @@ async function seed(): Promise<void> {
         code: 'PRJ1-125',
         title: 'Build Project 1 workspace',
         type: TaskType.TASK,
+        priority: TaskPriority.HIGH,
+        assigneeId: ids.user,
+        reporterId: ids.user,
+        labels: ['Frontend'],
+        dueDate: new Date('2026-07-27T00:00:00.000Z'),
         rank: 'a1',
       },
     });
@@ -110,6 +141,9 @@ async function seed(): Promise<void> {
         code: 'PRJ1-149',
         title: 'Validate Project 1 workflow',
         type: TaskType.SUBTASK,
+        priority: TaskPriority.MEDIUM,
+        assigneeId: ids.user,
+        reporterId: ids.user,
         rank: 'a2',
       },
     });
@@ -122,7 +156,30 @@ async function seed(): Promise<void> {
         code: 'PRJ1-161',
         title: 'Fix standalone Project 1 defect',
         type: TaskType.BUG,
+        priority: TaskPriority.HIGH,
+        assigneeId: ids.user,
+        reporterId: ids.user,
         rank: 'a0',
+      },
+    });
+
+    await tx.comment.create({
+      data: {
+        id: ids.comment,
+        taskId: ids.task,
+        authorId: ids.user,
+        body: 'Initial backend seed comment.',
+      },
+    });
+
+    await tx.activity.create({
+      data: {
+        id: ids.activity,
+        taskId: ids.task,
+        actorId: ids.user,
+        field: 'status',
+        from: 'todo',
+        to: 'in-progress',
       },
     });
   });

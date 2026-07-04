@@ -53,6 +53,9 @@ describe('API standards (e2e)', () => {
           version: '1.0',
         });
         expect(body.paths).toHaveProperty('/api/v1/health');
+        expect(body.components).toHaveProperty('schemas.TaskResponse');
+        expect(body.components).toHaveProperty('schemas.ProjectResponse');
+        expect(body.components).toHaveProperty('schemas.MoveTaskDto');
       });
   });
 

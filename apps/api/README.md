@@ -43,6 +43,18 @@ Interactive OpenAPI documentation is available at
 - Errors use a stable `{ statusCode, code, message, details?, timestamp, path }`
   response.
 
+## Domain contracts
+
+- Work item hierarchy is `Epic → Task/Bug → Subtask` with a maximum depth of
+  two parent edges.
+- Parents must belong to the same project; self-parenting and cycles are
+  rejected.
+- Project roles are `owner`, `admin`, `member`, and `viewer` with centralized
+  permission policies.
+- Task and column moves use rank anchors plus `expectedUpdatedAt` for
+  transactional optimistic-concurrency checks.
+- API enums use lowercase values while Prisma keeps uppercase database enums.
+
 ## Commands
 
 ```bash
