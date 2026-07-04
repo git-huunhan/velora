@@ -8,8 +8,8 @@ import { JwtService } from '@nestjs/jwt';
 import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from '../database/prisma.service';
 import type { User } from '../generated/prisma/client';
-import { UserRole as ApiUserRole } from '../domain/contracts/enums';
 import type { UserResponse } from '../domain/contracts';
+import { toUserResponse } from '../users/user.mapper';
 import type { AccessTokenPayload } from './auth.types';
 import type {
   AuthResponse,
@@ -42,7 +42,7 @@ export class AuthService {
       },
     });
     return {
-      user: this.toUserResponse(user),
+      user: toUserResponse(user),
       ...(await this.issueTokens(user)),
     };
   }
@@ -58,7 +58,7 @@ export class AuthService {
       throw new UnauthorizedException('Email or password is incorrect.');
     }
     return {
-      user: this.toUserResponse(user),
+      user: toUserResponse(user),
       ...(await this.issueTokens(user)),
     };
   }
@@ -92,7 +92,7 @@ export class AuthService {
   async getUser(userId: string): Promise<UserResponse> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException('The account no longer exists.');
-    return this.toUserResponse(user);
+    return toUserResponse(user);
   }
 
   private async issueTokens(user: User): Promise<AuthTokensResponse> {
@@ -118,17 +118,5 @@ export class AuthService {
 
   private hashToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
-  }
-
-  private toUserResponse(user: User): UserResponse {
-    return {
-      avatarUrl: user.avatarUrl,
-      createdAt: user.createdAt.toISOString(),
-      email: user.email,
-      id: user.id,
-      name: user.displayName,
-      role: user.role === 'ADMIN' ? ApiUserRole.ADMIN : ApiUserRole.USER,
-      updatedAt: user.updatedAt.toISOString(),
-    };
   }
 }

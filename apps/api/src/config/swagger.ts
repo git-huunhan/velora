@@ -10,6 +10,8 @@ import {
   AuthResponse,
   AuthTokensResponse,
 } from '../auth/contracts/auth.contract';
+import { UserListResponse } from '../users/contracts/user-list.contract';
+import { UpdateProfileDto } from '../users/dto/update-profile.dto';
 import {
   ActivityResponse,
   CommentResponse,
@@ -46,6 +48,8 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
       ProjectMemberResponse,
       ProjectResponse,
       TaskResponse,
+      UpdateProfileDto,
+      UserListResponse,
       UserResponse,
       UserSummary,
     ],
