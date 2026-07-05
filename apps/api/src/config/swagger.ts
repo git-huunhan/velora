@@ -12,6 +12,9 @@ import {
 } from '../auth/contracts/auth.contract';
 import { UserListResponse } from '../users/contracts/user-list.contract';
 import { UpdateProfileDto } from '../users/dto/update-profile.dto';
+import { ProjectListResponse } from '../projects/contracts/project-list.contract';
+import { CreateProjectDto } from '../projects/dto/create-project.dto';
+import { UpdateProjectDto } from '../projects/dto/update-project.dto';
 import {
   ActivityResponse,
   CommentResponse,
@@ -41,13 +44,16 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
       AuthResponse,
       AuthTokensResponse,
       CommentResponse,
+      CreateProjectDto,
       KanbanColumnResponse,
       MoveColumnDto,
       MoveTaskDto,
       PaginationMeta,
+      ProjectListResponse,
       ProjectMemberResponse,
       ProjectResponse,
       TaskResponse,
+      UpdateProjectDto,
       UpdateProfileDto,
       UserListResponse,
       UserResponse,
