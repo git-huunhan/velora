@@ -5,9 +5,11 @@ import { AppModule } from '../src/app.module';
 import type { AuthResponse } from '../src/auth/contracts/auth.contract';
 import { PrismaService } from '../src/database/prisma.service';
 import type {
+  KanbanColumnResponse,
   ProjectMemberResponse,
   ProjectResponse,
 } from '../src/domain/contracts';
+import type { KanbanColumnListResponse } from '../src/projects/contracts/kanban-column-list.contract';
 import type { ProjectListResponse } from '../src/projects/contracts/project-list.contract';
 import type { ProjectMemberListResponse } from '../src/projects/contracts/project-member-list.contract';
 import { configureApplication } from '../src/setup-app';
@@ -154,6 +156,56 @@ describe('Projects API integration', () => {
       .expect(({ body }) => {
         expect((body as ProjectResponse).archivedAt).toBeNull();
       });
+  });
+
+  it('manages workflow columns for project managers', async () => {
+    const listResponse = await request(server)
+      .get(`/api/v1/projects/${projectId}/columns`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200);
+    const defaultColumns = (listResponse.body as KanbanColumnListResponse).data;
+    expect(defaultColumns.map((column) => column.name)).toEqual([
+      'To Do',
+      'In Progress',
+      'Review',
+      'Done',
+    ]);
+
+    const createResponse = await request(server)
+      .post(`/api/v1/projects/${projectId}/columns`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Blocked' })
+      .expect(201);
+    const created = createResponse.body as KanbanColumnResponse;
+    expect(created).toMatchObject({ isDone: false, name: 'Blocked' });
+
+    await request(server)
+      .post(`/api/v1/projects/${projectId}/columns`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Blocked' })
+      .expect(409);
+
+    const updateResponse = await request(server)
+      .patch(`/api/v1/projects/${projectId}/columns/${created.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ isDone: true, name: 'QA Blocked' })
+      .expect(200);
+    const updated = updateResponse.body as KanbanColumnResponse;
+    expect(updated).toMatchObject({ isDone: true, name: 'QA Blocked' });
+
+    await request(server)
+      .post(`/api/v1/projects/${projectId}/columns/${updated.id}/move`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        afterColumnId: defaultColumns[0].id,
+        expectedUpdatedAt: updated.updatedAt,
+      })
+      .expect(200);
+
+    await request(server)
+      .delete(`/api/v1/projects/${projectId}/columns/${updated.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(204);
   });
 
   it('rejects duplicate keys and blocks non-members', async () => {

@@ -23,11 +23,19 @@ import type { AuthenticatedUser } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { UuidParamDto } from '../common/dto/uuid-param.dto';
-import { ProjectMemberResponse, ProjectResponse } from '../domain/contracts';
+import {
+  KanbanColumnResponse,
+  ProjectMemberResponse,
+  ProjectResponse,
+} from '../domain/contracts';
+import { MoveColumnDto } from '../domain/dto/move-task.dto';
+import { KanbanColumnListResponse } from './contracts/kanban-column-list.contract';
 import { ProjectListResponse } from './contracts/project-list.contract';
 import { ProjectMemberListResponse } from './contracts/project-member-list.contract';
 import { AddProjectMemberDto } from './dto/add-project-member.dto';
+import { CreateKanbanColumnDto } from './dto/create-kanban-column.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
+import { UpdateKanbanColumnDto } from './dto/update-kanban-column.dto';
 import { UpdateProjectMemberDto } from './dto/update-project-member.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { ProjectsService } from './projects.service';
@@ -152,6 +160,77 @@ export class ProjectsController {
       user.sub,
       projectId,
       memberUserId,
+    );
+  }
+
+  @Get(':id/columns')
+  @ApiOperation({ summary: 'List workflow columns for a project' })
+  @ApiOkResponse({ type: KanbanColumnListResponse })
+  listColumns(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+  ): Promise<KanbanColumnListResponse> {
+    return this.projectsService.listKanbanColumns(user.sub, projectId);
+  }
+
+  @Post(':id/columns')
+  @ApiOperation({ summary: 'Create a workflow column' })
+  @ApiCreatedResponse({ type: KanbanColumnResponse })
+  createColumn(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+    @Body() input: CreateKanbanColumnDto,
+  ): Promise<KanbanColumnResponse> {
+    return this.projectsService.createKanbanColumn(user.sub, projectId, input);
+  }
+
+  @Patch(':id/columns/:columnId')
+  @ApiOperation({ summary: 'Update workflow column metadata' })
+  @ApiOkResponse({ type: KanbanColumnResponse })
+  updateColumn(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+    @Param('columnId', ParseUUIDPipe) columnId: string,
+    @Body() input: UpdateKanbanColumnDto,
+  ): Promise<KanbanColumnResponse> {
+    return this.projectsService.updateKanbanColumn(
+      user.sub,
+      projectId,
+      columnId,
+      input,
+    );
+  }
+
+  @Post(':id/columns/:columnId/move')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Move a workflow column' })
+  @ApiOkResponse({ type: KanbanColumnResponse })
+  moveColumn(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+    @Param('columnId', ParseUUIDPipe) columnId: string,
+    @Body() input: MoveColumnDto,
+  ): Promise<KanbanColumnResponse> {
+    return this.projectsService.moveKanbanColumn(
+      user.sub,
+      projectId,
+      columnId,
+      input,
+    );
+  }
+
+  @Delete(':id/columns/:columnId')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Delete an empty workflow column' })
+  deleteColumn(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+    @Param('columnId', ParseUUIDPipe) columnId: string,
+  ): Promise<void> {
+    return this.projectsService.deleteKanbanColumn(
+      user.sub,
+      projectId,
+      columnId,
     );
   }
 }

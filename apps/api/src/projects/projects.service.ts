@@ -15,18 +15,24 @@ import {
   hasProjectPermission,
   ProjectPermission,
 } from '../domain/policies/project-permission.policy';
+import { validateMoveAnchors } from '../domain/policies/ordering.policy';
 import { PrismaService } from '../database/prisma.service';
 import {
   ProjectRole,
   ProjectStatus as PrismaProjectStatus,
   type Prisma,
 } from '../generated/prisma/client';
+import type { MoveColumnDto } from '../domain/dto/move-task.dto';
+import type { KanbanColumnListResponse } from './contracts/kanban-column-list.contract';
 import type { ProjectListResponse } from './contracts/project-list.contract';
 import type { ProjectMemberListResponse } from './contracts/project-member-list.contract';
 import type { AddProjectMemberDto } from './dto/add-project-member.dto';
+import type { CreateKanbanColumnDto } from './dto/create-kanban-column.dto';
+import type { UpdateKanbanColumnDto } from './dto/update-kanban-column.dto';
 import type { CreateProjectDto } from './dto/create-project.dto';
 import type { UpdateProjectMemberDto } from './dto/update-project-member.dto';
 import type { UpdateProjectDto } from './dto/update-project.dto';
+import { toKanbanColumnResponse } from './kanban-column.mapper';
 import { toProjectMemberResponse } from './project-member.mapper';
 import { toProjectResponse } from './project.mapper';
 
@@ -55,6 +61,10 @@ const roleToPrisma = {
   [ApiProjectRole.OWNER]: ProjectRole.OWNER,
   [ApiProjectRole.VIEWER]: ProjectRole.VIEWER,
 } as const;
+
+function columnRankAt(index: number): string {
+  return `a${String(index).padStart(6, '0')}`;
+}
 
 @Injectable()
 export class ProjectsService {
@@ -304,6 +314,174 @@ export class ProjectsService {
     });
   }
 
+  async listKanbanColumns(
+    userId: string,
+    projectId: string,
+  ): Promise<KanbanColumnListResponse> {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.READ_PROJECT,
+    );
+    const columns = await this.prisma.kanbanColumn.findMany({
+      where: { projectId },
+      orderBy: { rank: 'asc' },
+    });
+    return { data: columns.map(toKanbanColumnResponse) };
+  }
+
+  async createKanbanColumn(
+    userId: string,
+    projectId: string,
+    input: CreateKanbanColumnDto,
+  ) {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.MANAGE_WORKFLOW,
+    );
+    const name = input.name.trim();
+    const count = await this.prisma.kanbanColumn.count({
+      where: { projectId },
+    });
+    try {
+      return toKanbanColumnResponse(
+        await this.prisma.kanbanColumn.create({
+          data: {
+            isDone: input.isDone ?? false,
+            name,
+            projectId,
+            rank: columnRankAt(count),
+          },
+        }),
+      );
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new ConflictException('A column with this name already exists.');
+      }
+      throw error;
+    }
+  }
+
+  async updateKanbanColumn(
+    userId: string,
+    projectId: string,
+    columnId: string,
+    input: UpdateKanbanColumnDto,
+  ) {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.MANAGE_WORKFLOW,
+    );
+    await this.getKanbanColumnOrThrow(projectId, columnId);
+
+    try {
+      return toKanbanColumnResponse(
+        await this.prisma.kanbanColumn.update({
+          where: { id: columnId },
+          data: {
+            ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+            ...(input.isDone !== undefined ? { isDone: input.isDone } : {}),
+          },
+        }),
+      );
+    } catch (error) {
+      if (this.isUniqueConstraintError(error)) {
+        throw new ConflictException('A column with this name already exists.');
+      }
+      throw error;
+    }
+  }
+
+  async moveKanbanColumn(
+    userId: string,
+    projectId: string,
+    columnId: string,
+    input: MoveColumnDto,
+  ) {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.MANAGE_WORKFLOW,
+    );
+    const columns = await this.prisma.kanbanColumn.findMany({
+      where: { projectId },
+      orderBy: { rank: 'asc' },
+    });
+    const movingColumn = columns.find((column) => column.id === columnId);
+    if (!movingColumn) {
+      throw new NotFoundException('The column was not found.');
+    }
+    if (movingColumn.updatedAt.toISOString() !== input.expectedUpdatedAt) {
+      throw new ConflictException('The column was updated by another request.');
+    }
+
+    const validation = validateMoveAnchors(
+      { id: movingColumn.id, scopeId: movingColumn.projectId },
+      input.beforeColumnId,
+      input.afterColumnId,
+      columns.map((column) => ({ id: column.id, scopeId: column.projectId })),
+    );
+    if (!validation.valid) {
+      throw new BadRequestException(validation.reason);
+    }
+
+    const reordered = columns.filter((column) => column.id !== columnId);
+    const beforeIndex = input.beforeColumnId
+      ? reordered.findIndex((column) => column.id === input.beforeColumnId)
+      : -1;
+    const afterIndex = input.afterColumnId
+      ? reordered.findIndex((column) => column.id === input.afterColumnId)
+      : -1;
+    const insertIndex =
+      beforeIndex >= 0
+        ? beforeIndex
+        : afterIndex >= 0
+          ? afterIndex + 1
+          : reordered.length;
+    reordered.splice(insertIndex, 0, movingColumn);
+
+    const updated = await this.prisma.$transaction(async (transaction) => {
+      for (const [index, column] of reordered.entries()) {
+        await transaction.kanbanColumn.update({
+          where: { id: column.id },
+          data: { rank: columnRankAt(index) },
+        });
+      }
+      return transaction.kanbanColumn.findUniqueOrThrow({
+        where: { id: columnId },
+      });
+    });
+
+    return toKanbanColumnResponse(updated);
+  }
+
+  async deleteKanbanColumn(
+    userId: string,
+    projectId: string,
+    columnId: string,
+  ): Promise<void> {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.MANAGE_WORKFLOW,
+    );
+    await this.getKanbanColumnOrThrow(projectId, columnId);
+    const [columnCount, taskCount] = await this.prisma.$transaction([
+      this.prisma.kanbanColumn.count({ where: { projectId } }),
+      this.prisma.task.count({ where: { columnId } }),
+    ]);
+    if (columnCount <= 1) {
+      throw new BadRequestException('A project must keep at least one column.');
+    }
+    if (taskCount > 0) {
+      throw new ConflictException('Move or delete tasks in this column first.');
+    }
+
+    await this.prisma.kanbanColumn.delete({ where: { id: columnId } });
+  }
+
   private async assertProjectPermission(
     userId: string,
     projectId: string,
@@ -345,6 +523,16 @@ export class ProjectsService {
     return member;
   }
 
+  private async getKanbanColumnOrThrow(projectId: string, columnId: string) {
+    const column = await this.prisma.kanbanColumn.findUnique({
+      where: { id: columnId },
+    });
+    if (!column || column.projectId !== projectId) {
+      throw new NotFoundException('The column was not found.');
+    }
+    return column;
+  }
+
   private async assertProjectKeepsOwner(projectId: string): Promise<void> {
     const ownerCount = await this.prisma.projectMember.count({
       where: { projectId, role: ProjectRole.OWNER },
@@ -360,5 +548,14 @@ export class ProjectsService {
       throw new BadRequestException(`Unsupported project sort field: ${field}`);
     }
     return { [field]: direction };
+  }
+
+  private isUniqueConstraintError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'P2002'
+    );
   }
 }
