@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -21,9 +23,12 @@ import type { AuthenticatedUser } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { UuidParamDto } from '../common/dto/uuid-param.dto';
-import { ProjectResponse } from '../domain/contracts';
+import { ProjectMemberResponse, ProjectResponse } from '../domain/contracts';
 import { ProjectListResponse } from './contracts/project-list.contract';
+import { ProjectMemberListResponse } from './contracts/project-member-list.contract';
+import { AddProjectMemberDto } from './dto/add-project-member.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
+import { UpdateProjectMemberDto } from './dto/update-project-member.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { ProjectsService } from './projects.service';
 
@@ -95,5 +100,58 @@ export class ProjectsController {
     @Param() params: UuidParamDto,
   ): Promise<ProjectResponse> {
     return this.projectsService.unarchiveProject(user.sub, params.id);
+  }
+
+  @Get(':id/members')
+  @ApiOperation({ summary: 'List project members' })
+  @ApiOkResponse({ type: ProjectMemberListResponse })
+  listMembers(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+  ): Promise<ProjectMemberListResponse> {
+    return this.projectsService.listProjectMembers(user.sub, projectId);
+  }
+
+  @Post(':id/members')
+  @ApiOperation({ summary: 'Add a project member' })
+  @ApiCreatedResponse({ type: ProjectMemberResponse })
+  addMember(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+    @Body() input: AddProjectMemberDto,
+  ): Promise<ProjectMemberResponse> {
+    return this.projectsService.addProjectMember(user.sub, projectId, input);
+  }
+
+  @Patch(':id/members/:memberUserId')
+  @ApiOperation({ summary: 'Update a project member role' })
+  @ApiOkResponse({ type: ProjectMemberResponse })
+  updateMember(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+    @Param('memberUserId', ParseUUIDPipe) memberUserId: string,
+    @Body() input: UpdateProjectMemberDto,
+  ): Promise<ProjectMemberResponse> {
+    return this.projectsService.updateProjectMember(
+      user.sub,
+      projectId,
+      memberUserId,
+      input,
+    );
+  }
+
+  @Delete(':id/members/:memberUserId')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Remove a project member' })
+  removeMember(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+    @Param('memberUserId', ParseUUIDPipe) memberUserId: string,
+  ): Promise<void> {
+    return this.projectsService.removeProjectMember(
+      user.sub,
+      projectId,
+      memberUserId,
+    );
   }
 }

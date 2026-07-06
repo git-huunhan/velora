@@ -22,8 +22,12 @@ import {
   type Prisma,
 } from '../generated/prisma/client';
 import type { ProjectListResponse } from './contracts/project-list.contract';
+import type { ProjectMemberListResponse } from './contracts/project-member-list.contract';
+import type { AddProjectMemberDto } from './dto/add-project-member.dto';
 import type { CreateProjectDto } from './dto/create-project.dto';
+import type { UpdateProjectMemberDto } from './dto/update-project-member.dto';
 import type { UpdateProjectDto } from './dto/update-project.dto';
+import { toProjectMemberResponse } from './project-member.mapper';
 import { toProjectResponse } from './project.mapper';
 
 const PROJECT_SORT_FIELDS = new Set(['createdAt', 'key', 'name', 'updatedAt']);
@@ -44,6 +48,12 @@ const roleToApi = {
   MEMBER: ApiProjectRole.MEMBER,
   OWNER: ApiProjectRole.OWNER,
   VIEWER: ApiProjectRole.VIEWER,
+} as const;
+const roleToPrisma = {
+  [ApiProjectRole.ADMIN]: ProjectRole.ADMIN,
+  [ApiProjectRole.MEMBER]: ProjectRole.MEMBER,
+  [ApiProjectRole.OWNER]: ProjectRole.OWNER,
+  [ApiProjectRole.VIEWER]: ProjectRole.VIEWER,
 } as const;
 
 @Injectable()
@@ -198,6 +208,102 @@ export class ProjectsService {
     );
   }
 
+  async listProjectMembers(
+    userId: string,
+    projectId: string,
+  ): Promise<ProjectMemberListResponse> {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.READ_PROJECT,
+    );
+    const members = await this.prisma.projectMember.findMany({
+      where: { projectId },
+      include: { user: true },
+      orderBy: [{ role: 'desc' }, { createdAt: 'asc' }],
+    });
+    return { data: members.map(toProjectMemberResponse) };
+  }
+
+  async addProjectMember(
+    userId: string,
+    projectId: string,
+    input: AddProjectMemberDto,
+  ) {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.MANAGE_MEMBERS,
+    );
+    await this.assertUserExists(input.userId);
+
+    const existing = await this.prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId, userId: input.userId } },
+    });
+    if (existing) {
+      throw new ConflictException('This user is already a project member.');
+    }
+
+    return toProjectMemberResponse(
+      await this.prisma.projectMember.create({
+        data: {
+          projectId,
+          role: roleToPrisma[input.role],
+          userId: input.userId,
+        },
+        include: { user: true },
+      }),
+    );
+  }
+
+  async updateProjectMember(
+    userId: string,
+    projectId: string,
+    memberUserId: string,
+    input: UpdateProjectMemberDto,
+  ) {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.MANAGE_MEMBERS,
+    );
+    const member = await this.getProjectMemberOrThrow(projectId, memberUserId);
+    if (
+      member.role === ProjectRole.OWNER &&
+      roleToPrisma[input.role] !== ProjectRole.OWNER
+    ) {
+      await this.assertProjectKeepsOwner(projectId);
+    }
+
+    return toProjectMemberResponse(
+      await this.prisma.projectMember.update({
+        where: { projectId_userId: { projectId, userId: memberUserId } },
+        data: { role: roleToPrisma[input.role] },
+        include: { user: true },
+      }),
+    );
+  }
+
+  async removeProjectMember(
+    userId: string,
+    projectId: string,
+    memberUserId: string,
+  ): Promise<void> {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.MANAGE_MEMBERS,
+    );
+    const member = await this.getProjectMemberOrThrow(projectId, memberUserId);
+    if (member.role === ProjectRole.OWNER) {
+      await this.assertProjectKeepsOwner(projectId);
+    }
+
+    await this.prisma.projectMember.delete({
+      where: { projectId_userId: { projectId, userId: memberUserId } },
+    });
+  }
+
   private async assertProjectPermission(
     userId: string,
     projectId: string,
@@ -218,6 +324,33 @@ export class ProjectsService {
       throw new ForbiddenException(
         'You do not have permission for this project.',
       );
+    }
+  }
+
+  private async assertUserExists(userId: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!user) throw new NotFoundException('The user was not found.');
+  }
+
+  private async getProjectMemberOrThrow(projectId: string, userId: string) {
+    const member = await this.prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId, userId } },
+    });
+    if (!member) {
+      throw new NotFoundException('The project member was not found.');
+    }
+    return member;
+  }
+
+  private async assertProjectKeepsOwner(projectId: string): Promise<void> {
+    const ownerCount = await this.prisma.projectMember.count({
+      where: { projectId, role: ProjectRole.OWNER },
+    });
+    if (ownerCount <= 1) {
+      throw new BadRequestException('A project must keep at least one owner.');
     }
   }
 

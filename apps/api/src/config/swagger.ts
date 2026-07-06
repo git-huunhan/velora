@@ -13,7 +13,10 @@ import {
 import { UserListResponse } from '../users/contracts/user-list.contract';
 import { UpdateProfileDto } from '../users/dto/update-profile.dto';
 import { ProjectListResponse } from '../projects/contracts/project-list.contract';
+import { ProjectMemberListResponse } from '../projects/contracts/project-member-list.contract';
+import { AddProjectMemberDto } from '../projects/dto/add-project-member.dto';
 import { CreateProjectDto } from '../projects/dto/create-project.dto';
+import { UpdateProjectMemberDto } from '../projects/dto/update-project-member.dto';
 import { UpdateProjectDto } from '../projects/dto/update-project.dto';
 import {
   ActivityResponse,
@@ -40,6 +43,7 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
   return SwaggerModule.createDocument(app, config, {
     extraModels: [
       ActivityResponse,
+      AddProjectMemberDto,
       ApiErrorResponse,
       AuthResponse,
       AuthTokensResponse,
@@ -50,11 +54,13 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
       MoveTaskDto,
       PaginationMeta,
       ProjectListResponse,
+      ProjectMemberListResponse,
       ProjectMemberResponse,
       ProjectResponse,
       TaskResponse,
       UpdateProjectDto,
       UpdateProfileDto,
+      UpdateProjectMemberDto,
       UserListResponse,
       UserResponse,
       UserSummary,
