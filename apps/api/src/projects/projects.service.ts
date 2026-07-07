@@ -10,7 +10,14 @@ import type { ProjectResponse } from '../domain/contracts';
 import {
   ProjectRole as ApiProjectRole,
   ProjectStatus as ApiProjectStatus,
+  TaskPriority as ApiTaskPriority,
+  TaskType as ApiTaskType,
 } from '../domain/contracts/enums';
+import {
+  validateParentAssignment,
+  validateTaskDeletion,
+  type HierarchyTask,
+} from '../domain/policies/task-hierarchy.policy';
 import {
   hasProjectPermission,
   ProjectPermission,
@@ -20,21 +27,27 @@ import { PrismaService } from '../database/prisma.service';
 import {
   ProjectRole,
   ProjectStatus as PrismaProjectStatus,
+  TaskPriority as PrismaTaskPriority,
+  TaskType as PrismaTaskType,
   type Prisma,
 } from '../generated/prisma/client';
 import type { MoveColumnDto } from '../domain/dto/move-task.dto';
 import type { KanbanColumnListResponse } from './contracts/kanban-column-list.contract';
 import type { ProjectListResponse } from './contracts/project-list.contract';
 import type { ProjectMemberListResponse } from './contracts/project-member-list.contract';
+import type { TaskListResponse } from './contracts/task-list.contract';
 import type { AddProjectMemberDto } from './dto/add-project-member.dto';
 import type { CreateKanbanColumnDto } from './dto/create-kanban-column.dto';
 import type { UpdateKanbanColumnDto } from './dto/update-kanban-column.dto';
 import type { CreateProjectDto } from './dto/create-project.dto';
+import type { CreateTaskDto } from './dto/create-task.dto';
 import type { UpdateProjectMemberDto } from './dto/update-project-member.dto';
 import type { UpdateProjectDto } from './dto/update-project.dto';
+import type { UpdateTaskDto } from './dto/update-task.dto';
 import { toKanbanColumnResponse } from './kanban-column.mapper';
 import { toProjectMemberResponse } from './project-member.mapper';
 import { toProjectResponse } from './project.mapper';
+import { toTaskResponse } from './task.mapper';
 
 const PROJECT_SORT_FIELDS = new Set(['createdAt', 'key', 'name', 'updatedAt']);
 const DEFAULT_COLUMNS: Prisma.KanbanColumnCreateWithoutProjectInput[] = [
@@ -61,9 +74,30 @@ const roleToPrisma = {
   [ApiProjectRole.OWNER]: ProjectRole.OWNER,
   [ApiProjectRole.VIEWER]: ProjectRole.VIEWER,
 } as const;
+const priorityToPrisma = {
+  [ApiTaskPriority.HIGH]: PrismaTaskPriority.HIGH,
+  [ApiTaskPriority.LOW]: PrismaTaskPriority.LOW,
+  [ApiTaskPriority.MEDIUM]: PrismaTaskPriority.MEDIUM,
+} as const;
+const taskTypeToPrisma = {
+  [ApiTaskType.BUG]: PrismaTaskType.BUG,
+  [ApiTaskType.EPIC]: PrismaTaskType.EPIC,
+  [ApiTaskType.SUBTASK]: PrismaTaskType.SUBTASK,
+  [ApiTaskType.TASK]: PrismaTaskType.TASK,
+} as const;
+const taskTypeToApi = {
+  BUG: ApiTaskType.BUG,
+  EPIC: ApiTaskType.EPIC,
+  SUBTASK: ApiTaskType.SUBTASK,
+  TASK: ApiTaskType.TASK,
+} as const;
 
 function columnRankAt(index: number): string {
   return `a${String(index).padStart(6, '0')}`;
+}
+
+function taskRankAt(index: number): string {
+  return `a${String(index).padStart(8, '0')}`;
 }
 
 @Injectable()
@@ -482,6 +516,176 @@ export class ProjectsService {
     await this.prisma.kanbanColumn.delete({ where: { id: columnId } });
   }
 
+  async listTasks(
+    userId: string,
+    projectId: string,
+  ): Promise<TaskListResponse> {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.READ_WORK_ITEMS,
+    );
+    const tasks = await this.prisma.task.findMany({
+      where: { projectId },
+      include: { assignee: true, reporter: true },
+      orderBy: [{ column: { rank: 'asc' } }, { rank: 'asc' }],
+    });
+    return { data: tasks.map(toTaskResponse) };
+  }
+
+  async getTask(userId: string, projectId: string, taskId: string) {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.READ_WORK_ITEMS,
+    );
+    return toTaskResponse(await this.getTaskOrThrow(projectId, taskId));
+  }
+
+  async createTask(userId: string, projectId: string, input: CreateTaskDto) {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.CREATE_WORK_ITEMS,
+    );
+    await this.getKanbanColumnOrThrow(projectId, input.columnId);
+    if (input.assigneeId) {
+      await this.assertProjectMemberExists(projectId, input.assigneeId);
+    }
+
+    const parentId = input.parentId ?? null;
+    const type = input.type;
+    const hierarchyTasks = await this.getHierarchyTasks(projectId);
+    const hierarchyValidation = validateParentAssignment(
+      { id: '__new_task__', parentId: null, projectId, type },
+      parentId,
+      hierarchyTasks,
+    );
+    if (!hierarchyValidation.valid) {
+      throw new BadRequestException(hierarchyValidation.reason);
+    }
+
+    const [code, rank] = await Promise.all([
+      this.nextTaskCode(projectId),
+      this.nextTaskRank(input.columnId),
+    ]);
+
+    const task = await this.prisma.task.create({
+      data: {
+        assigneeId: input.assigneeId ?? null,
+        code,
+        columnId: input.columnId,
+        description: input.description?.trim() ?? '',
+        dueDate: input.dueDate ? new Date(input.dueDate) : null,
+        labels: this.normalizeLabels(input.labels),
+        parentId,
+        priority: priorityToPrisma[input.priority ?? ApiTaskPriority.MEDIUM],
+        projectId,
+        rank,
+        reporterId: userId,
+        title: input.title.trim(),
+        type: taskTypeToPrisma[type],
+      },
+      include: { assignee: true, reporter: true },
+    });
+    return toTaskResponse(task);
+  }
+
+  async updateTask(
+    userId: string,
+    projectId: string,
+    taskId: string,
+    input: UpdateTaskDto,
+  ) {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.UPDATE_WORK_ITEMS,
+    );
+    const existing = await this.getTaskOrThrow(projectId, taskId);
+    if (input.columnId) {
+      await this.getKanbanColumnOrThrow(projectId, input.columnId);
+    }
+    if (input.assigneeId) {
+      await this.assertProjectMemberExists(projectId, input.assigneeId);
+    }
+
+    const nextType = input.type ?? taskTypeToApi[existing.type];
+    const nextParentId =
+      input.parentId !== undefined ? input.parentId : existing.parentId;
+    const hierarchyTasks = await this.getHierarchyTasks(projectId);
+    const hierarchyValidation = validateParentAssignment(
+      {
+        id: existing.id,
+        parentId: existing.parentId,
+        projectId,
+        type: nextType,
+      },
+      nextParentId ?? null,
+      hierarchyTasks,
+    );
+    if (!hierarchyValidation.valid) {
+      throw new BadRequestException(hierarchyValidation.reason);
+    }
+
+    const data: Prisma.TaskUpdateInput = {};
+    if (input.columnId !== undefined) {
+      data.column = { connect: { id: input.columnId } };
+    }
+    if (input.parentId !== undefined) {
+      data.parent = input.parentId
+        ? { connect: { id: input.parentId } }
+        : { disconnect: true };
+    }
+    if (input.assigneeId !== undefined) {
+      data.assignee = input.assigneeId
+        ? { connect: { id: input.assigneeId } }
+        : { disconnect: true };
+    }
+    if (input.title !== undefined) data.title = input.title.trim();
+    if (input.description !== undefined) {
+      data.description = input.description.trim();
+    }
+    if (input.type !== undefined) data.type = taskTypeToPrisma[input.type];
+    if (input.priority !== undefined) {
+      data.priority = priorityToPrisma[input.priority];
+    }
+    if (input.labels !== undefined)
+      data.labels = this.normalizeLabels(input.labels);
+    if (input.dueDate !== undefined) {
+      data.dueDate = input.dueDate ? new Date(input.dueDate) : null;
+    }
+
+    return toTaskResponse(
+      await this.prisma.task.update({
+        where: { id: taskId },
+        data,
+        include: { assignee: true, reporter: true },
+      }),
+    );
+  }
+
+  async deleteTask(
+    userId: string,
+    projectId: string,
+    taskId: string,
+  ): Promise<void> {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.DELETE_WORK_ITEMS,
+    );
+    await this.getTaskOrThrow(projectId, taskId);
+    const hierarchyValidation = validateTaskDeletion(
+      taskId,
+      await this.getHierarchyTasks(projectId),
+    );
+    if (!hierarchyValidation.valid) {
+      throw new BadRequestException(hierarchyValidation.reason);
+    }
+    await this.prisma.task.delete({ where: { id: taskId } });
+  }
+
   private async assertProjectPermission(
     userId: string,
     projectId: string,
@@ -531,6 +735,74 @@ export class ProjectsService {
       throw new NotFoundException('The column was not found.');
     }
     return column;
+  }
+
+  private async getTaskOrThrow(projectId: string, taskId: string) {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      include: { assignee: true, reporter: true },
+    });
+    if (!task || task.projectId !== projectId) {
+      throw new NotFoundException('The task was not found.');
+    }
+    return task;
+  }
+
+  private async assertProjectMemberExists(
+    projectId: string,
+    userId: string,
+  ): Promise<void> {
+    const member = await this.prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId, userId } },
+      select: { userId: true },
+    });
+    if (!member) {
+      throw new BadRequestException('The assignee must be a project member.');
+    }
+  }
+
+  private async getHierarchyTasks(projectId: string): Promise<HierarchyTask[]> {
+    const tasks = await this.prisma.task.findMany({
+      where: { projectId },
+      select: { id: true, parentId: true, projectId: true, type: true },
+    });
+    return tasks.map((task) => ({
+      id: task.id,
+      parentId: task.parentId,
+      projectId: task.projectId,
+      type: taskTypeToApi[task.type],
+    }));
+  }
+
+  private async nextTaskCode(projectId: string): Promise<string> {
+    const project = await this.prisma.project.findUniqueOrThrow({
+      where: { id: projectId },
+      select: { key: true },
+    });
+    const latestTask = await this.prisma.task.findFirst({
+      where: { projectId },
+      orderBy: { createdAt: 'desc' },
+      select: { code: true },
+    });
+    const latestNumber = latestTask?.code.startsWith(`${project.key}-`)
+      ? Number(latestTask.code.slice(project.key.length + 1))
+      : 0;
+    return `${project.key}-${Number.isFinite(latestNumber) ? latestNumber + 1 : 1}`;
+  }
+
+  private async nextTaskRank(columnId: string): Promise<string> {
+    const count = await this.prisma.task.count({ where: { columnId } });
+    return taskRankAt(count);
+  }
+
+  private normalizeLabels(labels: string[] | undefined): string[] {
+    return Array.from(
+      new Set(
+        (labels ?? [])
+          .map((label) => label.trim())
+          .filter((label) => label.length > 0),
+      ),
+    );
   }
 
   private async assertProjectKeepsOwner(projectId: string): Promise<void> {

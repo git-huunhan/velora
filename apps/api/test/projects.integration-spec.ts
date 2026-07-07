@@ -8,10 +8,12 @@ import type {
   KanbanColumnResponse,
   ProjectMemberResponse,
   ProjectResponse,
+  TaskResponse,
 } from '../src/domain/contracts';
 import type { KanbanColumnListResponse } from '../src/projects/contracts/kanban-column-list.contract';
 import type { ProjectListResponse } from '../src/projects/contracts/project-list.contract';
 import type { ProjectMemberListResponse } from '../src/projects/contracts/project-member-list.contract';
+import type { TaskListResponse } from '../src/projects/contracts/task-list.contract';
 import { configureApplication } from '../src/setup-app';
 
 describe('Projects API integration', () => {
@@ -219,6 +221,133 @@ describe('Projects API integration', () => {
       .get(`/api/v1/projects/${projectId}`)
       .set('Authorization', `Bearer ${outsiderToken}`)
       .expect(403);
+  });
+
+  it('creates, lists, updates, and deletes hierarchical tasks', async () => {
+    const columnsResponse = await request(server)
+      .get(`/api/v1/projects/${projectId}/columns`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200);
+    const todoColumn = (columnsResponse.body as KanbanColumnListResponse)
+      .data[0];
+
+    const epicResponse = await request(server)
+      .post(`/api/v1/projects/${projectId}/tasks`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        columnId: todoColumn.id,
+        title: 'Project integration epic',
+        type: 'epic',
+      })
+      .expect(201);
+    const epic = epicResponse.body as TaskResponse;
+    expect(epic).toMatchObject({
+      parentId: null,
+      title: 'Project integration epic',
+      type: 'epic',
+    });
+
+    await request(server)
+      .post(`/api/v1/projects/${projectId}/tasks`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        columnId: todoColumn.id,
+        title: 'Invalid orphan subtask',
+        type: 'subtask',
+      })
+      .expect(400);
+
+    const taskResponse = await request(server)
+      .post(`/api/v1/projects/${projectId}/tasks`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        columnId: todoColumn.id,
+        labels: ['Backend', 'Backend', ' API '],
+        parentId: epic.id,
+        priority: 'high',
+        title: 'Build task API',
+        type: 'task',
+      })
+      .expect(201);
+    const task = taskResponse.body as TaskResponse;
+    expect(task).toMatchObject({
+      labels: ['Backend', 'API'],
+      parentId: epic.id,
+      priority: 'high',
+      title: 'Build task API',
+      type: 'task',
+    });
+
+    const subtaskResponse = await request(server)
+      .post(`/api/v1/projects/${projectId}/tasks`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        columnId: todoColumn.id,
+        parentId: task.id,
+        title: 'Wire task mapper',
+        type: 'subtask',
+      })
+      .expect(201);
+    const subtask = subtaskResponse.body as TaskResponse;
+    expect(subtask.parentId).toBe(task.id);
+
+    await request(server)
+      .get(`/api/v1/projects/${projectId}/tasks/${task.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect((body as TaskResponse).code).toBe(task.code);
+      });
+
+    await request(server)
+      .get(`/api/v1/projects/${projectId}/tasks`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as TaskListResponse;
+        expect(response.data.map((item) => item.id)).toEqual(
+          expect.arrayContaining([epic.id, task.id, subtask.id]),
+        );
+      });
+
+    await request(server)
+      .patch(`/api/v1/projects/${projectId}/tasks/${task.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        description: 'Updated task description',
+        dueDate: '2026-08-01T00:00:00.000Z',
+        priority: 'medium',
+        title: 'Build task CRUD API',
+      })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          description: 'Updated task description',
+          dueDate: '2026-08-01T00:00:00.000Z',
+          priority: 'medium',
+          title: 'Build task CRUD API',
+        });
+      });
+
+    await request(server)
+      .delete(`/api/v1/projects/${projectId}/tasks/${task.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(400);
+
+    await request(server)
+      .delete(`/api/v1/projects/${projectId}/tasks/${subtask.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(204);
+
+    await request(server)
+      .delete(`/api/v1/projects/${projectId}/tasks/${task.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(204);
+
+    await request(server)
+      .delete(`/api/v1/projects/${projectId}/tasks/${epic.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(204);
   });
 
   it('manages project members and protects the final owner', async () => {

@@ -27,17 +27,21 @@ import {
   KanbanColumnResponse,
   ProjectMemberResponse,
   ProjectResponse,
+  TaskResponse,
 } from '../domain/contracts';
 import { MoveColumnDto } from '../domain/dto/move-task.dto';
 import { KanbanColumnListResponse } from './contracts/kanban-column-list.contract';
 import { ProjectListResponse } from './contracts/project-list.contract';
 import { ProjectMemberListResponse } from './contracts/project-member-list.contract';
+import { TaskListResponse } from './contracts/task-list.contract';
 import { AddProjectMemberDto } from './dto/add-project-member.dto';
 import { CreateKanbanColumnDto } from './dto/create-kanban-column.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
+import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateKanbanColumnDto } from './dto/update-kanban-column.dto';
 import { UpdateProjectMemberDto } from './dto/update-project-member.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
+import { UpdateTaskDto } from './dto/update-task.dto';
 import { ProjectsService } from './projects.service';
 
 @ApiTags('projects')
@@ -232,5 +236,60 @@ export class ProjectsController {
       projectId,
       columnId,
     );
+  }
+
+  @Get(':id/tasks')
+  @ApiOperation({ summary: 'List project tasks' })
+  @ApiOkResponse({ type: TaskListResponse })
+  listTasks(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+  ): Promise<TaskListResponse> {
+    return this.projectsService.listTasks(user.sub, projectId);
+  }
+
+  @Post(':id/tasks')
+  @ApiOperation({ summary: 'Create a project task' })
+  @ApiCreatedResponse({ type: TaskResponse })
+  createTask(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+    @Body() input: CreateTaskDto,
+  ): Promise<TaskResponse> {
+    return this.projectsService.createTask(user.sub, projectId, input);
+  }
+
+  @Get(':id/tasks/:taskId')
+  @ApiOperation({ summary: 'Get a project task' })
+  @ApiOkResponse({ type: TaskResponse })
+  getTask(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+  ): Promise<TaskResponse> {
+    return this.projectsService.getTask(user.sub, projectId, taskId);
+  }
+
+  @Patch(':id/tasks/:taskId')
+  @ApiOperation({ summary: 'Update project task metadata' })
+  @ApiOkResponse({ type: TaskResponse })
+  updateTask(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+    @Body() input: UpdateTaskDto,
+  ): Promise<TaskResponse> {
+    return this.projectsService.updateTask(user.sub, projectId, taskId, input);
+  }
+
+  @Delete(':id/tasks/:taskId')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Delete a project task without children' })
+  deleteTask(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+  ): Promise<void> {
+    return this.projectsService.deleteTask(user.sub, projectId, taskId);
   }
 }
