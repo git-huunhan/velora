@@ -29,7 +29,7 @@ import {
   ProjectResponse,
   TaskResponse,
 } from '../domain/contracts';
-import { MoveColumnDto } from '../domain/dto/move-task.dto';
+import { MoveColumnDto, MoveTaskDto } from '../domain/dto/move-task.dto';
 import { KanbanColumnListResponse } from './contracts/kanban-column-list.contract';
 import { ProjectListResponse } from './contracts/project-list.contract';
 import { ProjectMemberListResponse } from './contracts/project-member-list.contract';
@@ -280,6 +280,19 @@ export class ProjectsController {
     @Body() input: UpdateTaskDto,
   ): Promise<TaskResponse> {
     return this.projectsService.updateTask(user.sub, projectId, taskId, input);
+  }
+
+  @Post(':id/tasks/:taskId/move')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Move a project task across columns or parents' })
+  @ApiOkResponse({ type: TaskResponse })
+  moveTask(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+    @Body() input: MoveTaskDto,
+  ): Promise<TaskResponse> {
+    return this.projectsService.moveTask(user.sub, projectId, taskId, input);
   }
 
   @Delete(':id/tasks/:taskId')

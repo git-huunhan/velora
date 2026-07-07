@@ -269,7 +269,7 @@ describe('Projects API integration', () => {
         type: 'task',
       })
       .expect(201);
-    const task = taskResponse.body as TaskResponse;
+    let task = taskResponse.body as TaskResponse;
     expect(task).toMatchObject({
       labels: ['Backend', 'API'],
       parentId: epic.id,
@@ -310,7 +310,7 @@ describe('Projects API integration', () => {
         );
       });
 
-    await request(server)
+    const updateResponse = await request(server)
       .patch(`/api/v1/projects/${projectId}/tasks/${task.id}`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({
@@ -328,6 +328,47 @@ describe('Projects API integration', () => {
           title: 'Build task CRUD API',
         });
       });
+    const updatedTask = updateResponse.body as TaskResponse;
+    task = updatedTask;
+
+    const inProgressColumn = (columnsResponse.body as KanbanColumnListResponse)
+      .data[1];
+
+    const moveResponse = await request(server)
+      .post(`/api/v1/projects/${projectId}/tasks/${task.id}/move`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        expectedUpdatedAt: task.updatedAt,
+        targetColumnId: inProgressColumn.id,
+        targetParentId: epic.id,
+      })
+      .expect(200);
+    task = moveResponse.body as TaskResponse;
+    expect(task).toMatchObject({
+      columnId: inProgressColumn.id,
+      parentId: epic.id,
+    });
+
+    await request(server)
+      .post(`/api/v1/projects/${projectId}/tasks/${task.id}/move`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        expectedUpdatedAt: updatedTask.updatedAt,
+        targetColumnId: todoColumn.id,
+        targetParentId: epic.id,
+      })
+      .expect(409);
+
+    await request(server)
+      .post(`/api/v1/projects/${projectId}/tasks`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        columnId: todoColumn.id,
+        priority: 'medium',
+        title: 'Create after a task leaves the column',
+        type: 'bug',
+      })
+      .expect(201);
 
     await request(server)
       .delete(`/api/v1/projects/${projectId}/tasks/${task.id}`)

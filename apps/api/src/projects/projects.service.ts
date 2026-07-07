@@ -31,7 +31,7 @@ import {
   TaskType as PrismaTaskType,
   type Prisma,
 } from '../generated/prisma/client';
-import type { MoveColumnDto } from '../domain/dto/move-task.dto';
+import type { MoveColumnDto, MoveTaskDto } from '../domain/dto/move-task.dto';
 import type { KanbanColumnListResponse } from './contracts/kanban-column-list.contract';
 import type { ProjectListResponse } from './contracts/project-list.contract';
 import type { ProjectMemberListResponse } from './contracts/project-member-list.contract';
@@ -665,6 +665,108 @@ export class ProjectsService {
     );
   }
 
+  async moveTask(
+    userId: string,
+    projectId: string,
+    taskId: string,
+    input: MoveTaskDto,
+  ) {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.UPDATE_WORK_ITEMS,
+    );
+    const movingTask = await this.getTaskOrThrow(projectId, taskId);
+    if (movingTask.updatedAt.toISOString() !== input.expectedUpdatedAt) {
+      throw new ConflictException('The task was updated by another request.');
+    }
+    await this.getKanbanColumnOrThrow(projectId, input.targetColumnId);
+
+    const targetParentId = input.targetParentId ?? null;
+    const hierarchyTasks = await this.getHierarchyTasks(projectId);
+    const hierarchyValidation = validateParentAssignment(
+      {
+        id: movingTask.id,
+        parentId: movingTask.parentId,
+        projectId,
+        type: taskTypeToApi[movingTask.type],
+      },
+      targetParentId,
+      hierarchyTasks,
+    );
+    if (!hierarchyValidation.valid) {
+      throw new BadRequestException(hierarchyValidation.reason);
+    }
+
+    const targetTasks = await this.prisma.task.findMany({
+      where: { columnId: input.targetColumnId },
+      orderBy: { rank: 'asc' },
+    });
+    const anchorValidation = validateMoveAnchors(
+      { id: taskId, scopeId: input.targetColumnId },
+      input.beforeTaskId,
+      input.afterTaskId,
+      targetTasks.map((task) => ({ id: task.id, scopeId: task.columnId })),
+    );
+    if (!anchorValidation.valid) {
+      throw new BadRequestException(anchorValidation.reason);
+    }
+
+    const reordered = targetTasks.filter((task) => task.id !== taskId);
+    const beforeIndex = input.beforeTaskId
+      ? reordered.findIndex((task) => task.id === input.beforeTaskId)
+      : -1;
+    const afterIndex = input.afterTaskId
+      ? reordered.findIndex((task) => task.id === input.afterTaskId)
+      : -1;
+    const insertIndex =
+      beforeIndex >= 0
+        ? beforeIndex
+        : afterIndex >= 0
+          ? afterIndex + 1
+          : reordered.length;
+    reordered.splice(insertIndex, 0, movingTask);
+
+    const moved = await this.prisma.$transaction(async (transaction) => {
+      const moveToken = `moving-${taskId}-${Date.now()}`;
+      await transaction.task.update({
+        where: { id: taskId },
+        data: { rank: moveToken },
+      });
+
+      for (const [index, task] of reordered.entries()) {
+        if (task.id === taskId) continue;
+        await transaction.task.update({
+          where: { id: task.id },
+          data: { rank: `tmp-${index}-${task.id}` },
+        });
+      }
+
+      for (const [index, task] of reordered.entries()) {
+        await transaction.task.update({
+          where: { id: task.id },
+          data:
+            task.id === taskId
+              ? {
+                  column: { connect: { id: input.targetColumnId } },
+                  parent: targetParentId
+                    ? { connect: { id: targetParentId } }
+                    : { disconnect: true },
+                  rank: taskRankAt(index),
+                }
+              : { rank: taskRankAt(index) },
+        });
+      }
+
+      return transaction.task.findUniqueOrThrow({
+        where: { id: taskId },
+        include: { assignee: true, reporter: true },
+      });
+    });
+
+    return toTaskResponse(moved);
+  }
+
   async deleteTask(
     userId: string,
     projectId: string,
@@ -791,8 +893,16 @@ export class ProjectsService {
   }
 
   private async nextTaskRank(columnId: string): Promise<string> {
-    const count = await this.prisma.task.count({ where: { columnId } });
-    return taskRankAt(count);
+    const tasks = await this.prisma.task.findMany({
+      where: { columnId },
+      select: { rank: true },
+    });
+    const maxRank = tasks.reduce((max, task) => {
+      const match = /^a(\d+)$/.exec(task.rank);
+      if (!match) return max;
+      return Math.max(max, Number(match[1]));
+    }, -1);
+    return taskRankAt(maxRank + 1);
   }
 
   private normalizeLabels(labels: string[] | undefined): string[] {
