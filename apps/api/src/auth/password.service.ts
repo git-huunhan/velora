@@ -7,6 +7,7 @@ import {
 import { promisify } from 'node:util';
 
 const scrypt = promisify(nodeScrypt);
+const hexPattern = /^[0-9a-f]+$/i;
 
 @Injectable()
 export class PasswordService {
@@ -17,15 +18,16 @@ export class PasswordService {
   }
 
   async verify(password: string, storedHash: string): Promise<boolean> {
-    const [algorithm, saltHex, hashHex] = storedHash.split(':');
-    if (algorithm !== 'scrypt' || !saltHex || !hashHex) return false;
+    const [algorithm, saltValue, hashValue] = storedHash.split(':');
+    if (algorithm !== 'scrypt' || !saltValue || !hashValue) return false;
 
-    const expected = Buffer.from(hashHex, 'hex');
-    const actual = (await scrypt(
-      password,
-      Buffer.from(saltHex, 'hex'),
-      expected.length,
-    )) as Buffer;
+    const isHexHash = hashValue.length % 2 === 0 && hexPattern.test(hashValue);
+    const expected = Buffer.from(hashValue, isHexHash ? 'hex' : 'base64url');
+    const salt =
+      saltValue.length % 2 === 0 && hexPattern.test(saltValue)
+        ? Buffer.from(saltValue, 'hex')
+        : saltValue;
+    const actual = (await scrypt(password, salt, expected.length)) as Buffer;
     return (
       expected.length === actual.length && timingSafeEqual(expected, actual)
     );

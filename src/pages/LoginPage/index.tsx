@@ -90,7 +90,7 @@ export default function LoginPage() {
               <Input
                 {...register("email")}
                 type="email"
-                placeholder="admin@demo.com"
+                placeholder="admin@velora.local"
                 autoComplete="email"
               />
               {errors.email && (
@@ -150,10 +150,10 @@ export default function LoginPage() {
               Demo accounts:
             </p>
             <p className="text-xs text-muted-foreground font-mono">
-              admin@demo.com / admin123
+              admin@velora.local / Password123!
             </p>
             <p className="text-xs text-muted-foreground font-mono">
-              user@demo.com / user123
+              test@velora.local / Password123!
             </p>
           </div>
         </div>

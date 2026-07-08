@@ -1,53 +1,89 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { AuthContext, type User } from "./AuthContext";
+import {
+  getCurrentUser,
+  loginWithPassword,
+  logoutSession,
+} from "../api/authApi";
+import { getAccessToken, getRefreshToken } from "@/shared/api/client";
 
 interface AuthProviderProps {
   children: ReactNode;
 }
 
-const MOCK_ACCOUNTS = [
-  {
-    email: "admin@demo.com",
-    password: "admin123",
-    user: { id: "1", name: "Admin Pro", role: "admin" as const },
-  },
-  {
-    email: "user@demo.com",
-    password: "user123",
-    user: { id: "2", name: "Jane Smith", role: "user" as const },
-  },
-];
+let currentUserRequest: Promise<User> | null = null;
 
-export function AuthProvider({ children }: AuthProviderProps) {
-  const [user, setUser] = useState<User | null>(() => {
-    const storedUser = localStorage.getItem("user");
-
-    return storedUser ? JSON.parse(storedUser) : null;
+function getCurrentUserOnce() {
+  currentUserRequest ??= getCurrentUser().finally(() => {
+    currentUserRequest = null;
   });
 
-  const login = async (email: string, password: string) => {
-    await new Promise((res) => setTimeout(res, 800));
-    const account = MOCK_ACCOUNTS.find(
-      (a) => a.email === email && a.password === password,
-    );
-    if (!account) {
-      return { success: false, error: "Invalid email or password" };
+  return currentUserRequest;
+}
+
+export function AuthProvider({ children }: AuthProviderProps) {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    if (!getAccessToken() && !getRefreshToken()) {
+      setIsLoading(false);
+      return () => {
+        mounted = false;
+      };
     }
-    setUser(account.user);
-    localStorage.setItem("user", JSON.stringify(account.user));
-    return { success: true };
+
+    getCurrentUserOnce()
+      .then((currentUser) => {
+        if (!mounted) return;
+        setUser(currentUser);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setUser(null);
+        localStorage.removeItem("user");
+      })
+      .finally(() => {
+        if (mounted) setIsLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const login = async (email: string, password: string) => {
+    setUser(null);
+    localStorage.removeItem("user");
+
+    try {
+      const currentUser = await loginWithPassword(email, password);
+      setUser(currentUser);
+      return { success: true };
+    } catch (error) {
+      setUser(null);
+      localStorage.removeItem("user");
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Invalid email or password",
+      };
+    }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await logoutSession();
     setUser(null);
-
     localStorage.removeItem("user");
   };
 
   return (
     <AuthContext.Provider
       value={{
+        isLoading,
         user,
         login,
         logout,

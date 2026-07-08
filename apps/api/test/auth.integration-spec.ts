@@ -100,4 +100,14 @@ describe('Auth API integration', () => {
       .send({ email, password: 'wrong-password' })
       .expect(401);
   });
+
+  it('rejects invalid credentials for seeded users', async () => {
+    await request(server)
+      .post('/api/v1/auth/login')
+      .send({
+        email: 'admin@velora.local',
+        password: 'definitely-wrong',
+      })
+      .expect(401);
+  });
 });

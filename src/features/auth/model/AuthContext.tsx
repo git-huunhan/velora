@@ -7,6 +7,7 @@ export interface User {
 }
 
 export interface AuthContextValue {
+  isLoading: boolean;
   user: User | null;
   login: (
     email: string,

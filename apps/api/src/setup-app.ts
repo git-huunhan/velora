@@ -10,6 +10,11 @@ import { configureSwagger } from './config/swagger';
 
 export function configureApplication(app: INestApplication): void {
   app.setGlobalPrefix('api');
+  app.enableCors({
+    allowedHeaders: ['Authorization', 'Content-Type'],
+    methods: ['GET', 'HEAD', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    origin: [/^http:\/\/localhost:\d+$/],
+  });
   app.enableVersioning({
     type: VersioningType.URI,
     defaultVersion: '1',
