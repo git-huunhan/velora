@@ -5,7 +5,6 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import type { ProjectResponse } from '../domain/contracts';
 import {
   ProjectRole as ApiProjectRole,
@@ -43,6 +42,7 @@ import { toCommentResponse } from './comment.mapper';
 import type { AddProjectMemberDto } from './dto/add-project-member.dto';
 import type { CreateKanbanColumnDto } from './dto/create-kanban-column.dto';
 import type { CreateCommentDto } from './dto/create-comment.dto';
+import type { ProjectListQueryDto } from './dto/project-list-query.dto';
 import type { UpdateKanbanColumnDto } from './dto/update-kanban-column.dto';
 import type { CreateProjectDto } from './dto/create-project.dto';
 import type { CreateTaskDto } from './dto/create-task.dto';
@@ -122,11 +122,17 @@ export class ProjectsService {
 
   async listProjects(
     userId: string,
-    query: PaginationQueryDto,
+    query: ProjectListQueryDto,
   ): Promise<ProjectListResponse> {
     const sort = this.parseSort(query.sort);
     const search = query.search?.trim();
     const where: Prisma.ProjectWhereInput = {
+      ...(query.status === 'archived'
+        ? { archivedAt: { not: null } }
+        : { archivedAt: null }),
+      ...(query.status && query.status !== 'archived'
+        ? { status: statusToPrisma[query.status] }
+        : {}),
       members: { some: { userId } },
       ...(search
         ? {

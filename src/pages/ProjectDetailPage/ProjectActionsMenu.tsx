@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Archive, Copy, MoreHorizontal, Trash2 } from "lucide-react";
+import { Archive, Copy, MoreHorizontal } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -18,20 +18,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  useDeleteProject,
-  useUpdateProject,
-  type Project,
-} from "@/features/projects";
+import { useArchiveProject, type Project } from "@/features/projects";
 
 export function ProjectActionsMenu({ project }: { project: Project }) {
   const navigate = useNavigate();
-  const updateProject = useUpdateProject();
-  const deleteProject = useDeleteProject();
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const archiveProject = useArchiveProject();
+  const [isArchiveOpen, setIsArchiveOpen] = useState(false);
 
   const copyProjectLink = async () => {
     try {
@@ -42,26 +36,13 @@ export function ProjectActionsMenu({ project }: { project: Project }) {
     }
   };
 
-  const archiveProject = () => {
-    updateProject.mutate(
-      { id: project.id, data: { archivedAt: new Date().toISOString() } },
-      {
-        onSuccess: () => {
-          toast.success("Project archived");
-          navigate("/projects");
-        },
-        onError: () => toast.error("Failed to archive project"),
-      },
-    );
-  };
-
-  const confirmDelete = () => {
-    deleteProject.mutate(project.id, {
+  const confirmArchive = () => {
+    archiveProject.mutate(project.id, {
       onSuccess: () => {
-        toast.success("Project deleted");
+        toast.success("Project archived");
         navigate("/projects");
       },
-      onError: () => toast.error("Failed to delete project"),
+      onError: () => toast.error("Failed to archive project"),
     });
   };
 
@@ -83,34 +64,30 @@ export function ProjectActionsMenu({ project }: { project: Project }) {
             <Copy /> Copy project link
           </DropdownMenuItem>
           <DropdownMenuItem
-            disabled={updateProject.isPending}
-            onSelect={archiveProject}
+            disabled={archiveProject.isPending}
+            onSelect={() => setIsArchiveOpen(true)}
           >
             <Archive /> Archive project
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            onSelect={() => setIsDeleteOpen(true)}
-          >
-            <Trash2 /> Delete project
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <AlertDialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+      <AlertDialog open={isArchiveOpen} onOpenChange={setIsArchiveOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {project.name}?</AlertDialogTitle>
+            <AlertDialogTitle>Archive {project.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently deletes the project and removes it from your
-              spaces. This action cannot be undone.
+              This project will move to archived projects. You can restore it
+              later from the archived projects list.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={confirmDelete}>
-              Delete project
+            <AlertDialogAction
+              onClick={confirmArchive}
+              disabled={archiveProject.isPending}
+            >
+              {archiveProject.isPending ? "Archiving..." : "Archive project"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

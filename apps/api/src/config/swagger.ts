@@ -23,6 +23,7 @@ import { CreateKanbanColumnDto } from '../projects/dto/create-kanban-column.dto'
 import { CreateCommentDto } from '../projects/dto/create-comment.dto';
 import { CreateProjectDto } from '../projects/dto/create-project.dto';
 import { CreateTaskDto } from '../projects/dto/create-task.dto';
+import { ProjectListQueryDto } from '../projects/dto/project-list-query.dto';
 import { UpdateKanbanColumnDto } from '../projects/dto/update-kanban-column.dto';
 import { UpdateProjectMemberDto } from '../projects/dto/update-project-member.dto';
 import { UpdateProjectDto } from '../projects/dto/update-project.dto';
@@ -69,6 +70,7 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
       MoveTaskDto,
       PaginationMeta,
       ProjectListResponse,
+      ProjectListQueryDto,
       ProjectMemberListResponse,
       ProjectMemberResponse,
       ProjectResponse,

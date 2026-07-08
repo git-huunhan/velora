@@ -37,15 +37,23 @@ import {
 import { RoleGuard, useAuth } from "@/features/auth";
 import {
   ProjectForm,
+  useArchiveProject,
   useCreateProject,
-  useDeleteProject,
   useProjects,
+  useRestoreProject,
   useUpdateProject,
   type Project,
 } from "@/features/projects";
 import type { ProjectFormData } from "@/features/projects/ui/ProjectForm/ProjectForm";
 import { useUrlParams } from "@/shared/hooks/useUrlParams";
-import { FolderKanban, Search, Star, MoreHorizontal } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  FolderKanban,
+  MoreHorizontal,
+  Search,
+  Star,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -62,14 +70,16 @@ export default function ProjectsPage() {
   const [status, setStatus] = useState(initialStatus);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isArchiveOpen, setIsArchiveOpen] = useState(false);
   const createMutation = useCreateProject();
 
   const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(
+  const [archivingProjectId, setArchivingProjectId] = useState<string | null>(
     null,
   );
   const updateMutation = useUpdateProject();
-  const deleteMutation = useDeleteProject();
+  const archiveMutation = useArchiveProject();
+  const restoreMutation = useRestoreProject();
 
   useEffect(() => {
     setPage(Number(getParam("page", "1")));
@@ -77,6 +87,11 @@ export default function ProjectsPage() {
   }, [getParam]);
 
   const { data, isLoading, isError } = useProjects(page, 5, status);
+  const {
+    data: archivedProjects,
+    isError: isArchivedError,
+    isLoading: isArchivedLoading,
+  } = useProjects(1, 20, "archived");
 
   const handleFilterChange = (newStatus: string) => {
     setStatus(newStatus);
@@ -120,14 +135,21 @@ export default function ProjectsPage() {
     );
   };
 
-  const handleDeleteProject = () => {
-    if (!deletingProjectId) return;
-    deleteMutation.mutate(deletingProjectId, {
+  const handleArchiveProject = () => {
+    if (!archivingProjectId) return;
+    archiveMutation.mutate(archivingProjectId, {
       onSuccess: () => {
-        setDeletingProjectId(null);
-        toast.success("Project deleted");
+        setArchivingProjectId(null);
+        toast.success("Project archived");
       },
-      onError: () => toast.error("Failed to delete project"),
+      onError: () => toast.error("Failed to archive project"),
+    });
+  };
+
+  const handleRestoreProject = (projectId: string) => {
+    restoreMutation.mutate(projectId, {
+      onSuccess: () => toast.success("Project restored"),
+      onError: () => toast.error("Failed to restore project"),
     });
   };
 
@@ -170,6 +192,15 @@ export default function ProjectsPage() {
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
           </Select>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Archived projects"
+            className="h-9 w-9 shrink-0"
+            onClick={() => setIsArchiveOpen(true)}
+          >
+            <Archive className="h-4 w-4" />
+          </Button>
         </div>
 
         <div className="rounded-md border bg-card text-card-foreground overflow-hidden">
@@ -377,6 +408,73 @@ export default function ProjectsPage() {
           </DialogContent>
         </Dialog>
 
+        <Dialog open={isArchiveOpen} onOpenChange={setIsArchiveOpen}>
+          <DialogContent className="sm:max-w-[560px]">
+            <DialogHeader>
+              <DialogTitle>Archived projects</DialogTitle>
+            </DialogHeader>
+            <div className="max-h-[420px] overflow-y-auto pr-1">
+              {isArchivedLoading ? (
+                <div className="space-y-2">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <div
+                      key={index}
+                      className="h-14 rounded-md border bg-muted/40 animate-pulse"
+                    />
+                  ))}
+                </div>
+              ) : isArchivedError ? (
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  Failed to load archived projects.
+                </div>
+              ) : archivedProjects?.data.length === 0 ? (
+                <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+                  No archived projects.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {archivedProjects?.data.map((project) => {
+                    const currentAvatar = getSpaceAvatar(project.avatar);
+                    const Icon = currentAvatar.icon;
+                    return (
+                      <div
+                        key={project.id}
+                        className="flex items-center justify-between gap-3 rounded-md border bg-card px-3 py-2"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div
+                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded ${currentAvatar.bg} ${currentAvatar.text}`}
+                          >
+                            <Icon className="h-5 w-5" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium text-foreground">
+                              {project.name}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {project.key}
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0 gap-2"
+                          disabled={restoreMutation.isPending}
+                          onClick={() => handleRestoreProject(project.id)}
+                        >
+                          <ArchiveRestore className="h-4 w-4" />
+                          Restore
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <Dialog
           open={!!editingProject}
           onOpenChange={() => setEditingProject(null)}
@@ -394,25 +492,24 @@ export default function ProjectsPage() {
         </Dialog>
 
         <AlertDialog
-          open={!!deletingProjectId}
-          onOpenChange={() => setDeletingProjectId(null)}
+          open={!!archivingProjectId}
+          onOpenChange={() => setArchivingProjectId(null)}
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete Project?</AlertDialogTitle>
+              <AlertDialogTitle>Archive Project?</AlertDialogTitle>
               <AlertDialogDescription>
-                This action cannot be undone. All tasks in this project will
-                also be affected.
+                This project will move to archived projects. You can restore it
+                later from the archived projects list.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                onClick={handleDeleteProject}
-                disabled={deleteMutation.isPending}
+                onClick={handleArchiveProject}
+                disabled={archiveMutation.isPending}
               >
-                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                {archiveMutation.isPending ? "Archiving..." : "Archive"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

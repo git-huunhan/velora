@@ -1,91 +1,171 @@
-import type { PaginatedProjects, Project } from "../model/types";
+import { apiRequest } from "@/shared/api/client";
+
+import type { PaginatedProjects, Project, ProjectStatus } from "../model/types";
 import type { ProjectFormData } from "../ui/ProjectForm/ProjectForm";
 
-let projectsDb: Project[] = Array.from({ length: 24 }).map((_, i) => {
-  return {
-    id: `proj-${i + 1}`,
-    name: `Project ${i + 1}`,
-    key: `PRJ${i + 1}`,
-    description: `This is the detailed description for Project ${i + 1}`,
-    status: i % 3 === 0 ? "completed" : i % 2 === 0 ? "planning" : "active",
-    startDate: "2024-01-01",
-    endDate: "2024-12-31",
-    memberIds: ["1", "2"],
-    avatar: ((i % 24) + 1).toString(),
-  };
-});
+interface ApiProject {
+  archivedAt: string | null;
+  avatarUrl: string | null;
+  createdAt: string;
+  description: string;
+  endDate: string | null;
+  id: string;
+  key: string;
+  name: string;
+  startDate: string | null;
+  status: ProjectStatus;
+  updatedAt: string;
+}
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+interface ApiProjectList {
+  data: ApiProject[];
+  meta: {
+    limit: number;
+    page: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+interface ApiProjectMemberList {
+  data: Array<{
+    user: {
+      id: string;
+    };
+  }>;
+}
+
+type ProjectMutationData = Partial<Omit<Project, "id" | "createdAt">>;
+
+const AVATAR_URL_PREFIX = "https://velora.local/space-avatar/";
+const projectKeyCache = new Map<string, string>();
+
+function avatarIdToUrl(avatar?: string | null) {
+  return avatar ? `${AVATAR_URL_PREFIX}${avatar}` : null;
+}
+
+function avatarUrlToId(avatarUrl?: string | null) {
+  if (!avatarUrl?.startsWith(AVATAR_URL_PREFIX)) return undefined;
+  return avatarUrl.slice(AVATAR_URL_PREFIX.length);
+}
+
+function dateOnly(value?: string | null) {
+  return value ? value.slice(0, 10) : "";
+}
+
+function toProject(apiProject: ApiProject, memberIds: string[] = []): Project {
+  const project: Project = {
+    archivedAt: apiProject.archivedAt ?? undefined,
+    avatar: avatarUrlToId(apiProject.avatarUrl),
+    description: apiProject.description,
+    endDate: dateOnly(apiProject.endDate),
+    id: apiProject.id,
+    key: apiProject.key,
+    memberIds,
+    name: apiProject.name,
+    startDate: dateOnly(apiProject.startDate),
+    status: apiProject.status,
+  };
+  projectKeyCache.set(project.id, project.key);
+  return project;
+}
+
+function toProjectUpdatePayload(data: ProjectMutationData) {
+  return {
+    avatarUrl:
+      data.avatar !== undefined ? avatarIdToUrl(data.avatar) : undefined,
+    description: data.description,
+    endDate: data.endDate ? new Date(data.endDate).toISOString() : undefined,
+    name: data.name,
+    startDate: data.startDate
+      ? new Date(data.startDate).toISOString()
+      : undefined,
+    status: data.status,
+  };
+}
 
 export async function getProjects(
   page: number = 1,
   limit: number = 5,
   status?: string,
 ): Promise<PaginatedProjects> {
-  await delay(600);
+  const search = new URLSearchParams({
+    limit: String(limit),
+    page: String(page),
+    sort: "createdAt:desc",
+  });
 
-  let filtered = projectsDb.filter((project) => !project.archivedAt);
-  if (status === "archived") {
-    filtered = projectsDb.filter((project) => !!project.archivedAt);
-  } else if (status && status !== "all") {
-    filtered = filtered.filter((p) => p.status === status);
+  if (status && status !== "all") {
+    search.set("status", status);
   }
 
-  const startIndex = (page - 1) * limit;
-  const endIndex = startIndex + limit;
-  const paginatedData = filtered.slice(startIndex, endIndex);
-
+  const response = await apiRequest<ApiProjectList>(`/projects?${search}`);
   return {
-    data: paginatedData,
-    totalCount: filtered.length,
-    totalPages: Math.ceil(filtered.length / limit),
+    data: response.data.map((project) => toProject(project)),
+    totalCount: response.meta.total,
+    totalPages: response.meta.totalPages,
   };
 }
 
 export async function getProjectById(id: string): Promise<Project> {
-  await delay(400);
-  const project = projectsDb.find((p) => p.id === id);
-  if (!project) throw new Error("Project not found");
-  return { ...project };
+  const [project, members] = await Promise.all([
+    apiRequest<ApiProject>(`/projects/${id}`),
+    apiRequest<ApiProjectMemberList>(`/projects/${id}/members`),
+  ]);
+
+  return toProject(
+    project,
+    members.data.map((member) => member.user.id),
+  );
 }
 
 export function getProjectKeySync(id: string): string {
-  const project = projectsDb.find((p) => p.id === id);
-  return project ? project.key : "TASK";
+  return projectKeyCache.get(id) ?? "TASK";
 }
 
 export async function createProject(data: ProjectFormData): Promise<Project> {
-  await delay(600);
+  const created = await apiRequest<ApiProject>("/projects", {
+    body: JSON.stringify({
+      description: data.description || "",
+      key: data.key.trim().toUpperCase(),
+      name: data.name.trim(),
+    }),
+    method: "POST",
+  });
 
-  const newProject: Project = {
-    ...data,
-    description: data.description || "",
-    id: `proj-${Date.now()}`,
-  };
+  const needsPatch =
+    data.status !== "active" || !!data.startDate || !!data.endDate;
+  if (!needsPatch) return toProject(created);
 
-  projectsDb = [newProject, ...projectsDb];
-  return newProject;
+  return updateProject(created.id, {
+    endDate: data.endDate,
+    startDate: data.startDate,
+    status: data.status,
+  });
 }
 
 export async function updateProject(
   id: string,
-  data: Partial<Omit<Project, "id" | "createdAt">>,
+  data: ProjectMutationData,
 ): Promise<Project> {
-  await delay(400);
-  const index = projectsDb.findIndex((p) => p.id === id);
-  if (index === -1) throw new Error("Project not found");
-
-  const updatedProject = { ...projectsDb[index], ...data };
-  projectsDb = [
-    ...projectsDb.slice(0, index),
-    updatedProject,
-    ...projectsDb.slice(index + 1),
-  ];
-
-  return updatedProject;
+  return toProject(
+    await apiRequest<ApiProject>(`/projects/${id}`, {
+      body: JSON.stringify(toProjectUpdatePayload(data)),
+      method: "PATCH",
+    }),
+  );
 }
 
-export async function deleteProject(id: string): Promise<void> {
-  await delay(400);
-  projectsDb = projectsDb.filter((p) => p.id !== id);
+export async function archiveProject(id: string): Promise<void> {
+  await apiRequest<ApiProject>(`/projects/${id}/archive`, {
+    method: "POST",
+  });
+}
+
+export async function restoreProject(id: string): Promise<Project> {
+  return toProject(
+    await apiRequest<ApiProject>(`/projects/${id}/unarchive`, {
+      method: "POST",
+    }),
+  );
 }

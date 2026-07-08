@@ -21,7 +21,6 @@ import {
 import { AccessTokenGuard } from '../auth/access-token.guard';
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { UuidParamDto } from '../common/dto/uuid-param.dto';
 import {
   KanbanColumnResponse,
@@ -42,6 +41,7 @@ import { CreateKanbanColumnDto } from './dto/create-kanban-column.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
+import { ProjectListQueryDto } from './dto/project-list-query.dto';
 import { UpdateKanbanColumnDto } from './dto/update-kanban-column.dto';
 import { UpdateProjectMemberDto } from './dto/update-project-member.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
@@ -60,7 +60,7 @@ export class ProjectsController {
   @ApiOkResponse({ type: ProjectListResponse })
   list(
     @CurrentUser() user: AuthenticatedUser,
-    @Query() query: PaginationQueryDto,
+    @Query() query: ProjectListQueryDto,
   ): Promise<ProjectListResponse> {
     return this.projectsService.listProjects(user.sub, query);
   }

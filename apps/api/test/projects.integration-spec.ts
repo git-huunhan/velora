@@ -156,6 +156,28 @@ describe('Projects API integration', () => {
       });
 
     await request(server)
+      .get('/api/v1/projects')
+      .query({ search: key })
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ProjectListResponse;
+        expect(response.data).toHaveLength(0);
+        expect(response.meta.total).toBe(0);
+      });
+
+    await request(server)
+      .get('/api/v1/projects')
+      .query({ search: key, status: 'archived' })
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ProjectListResponse;
+        expect(response.data).toHaveLength(1);
+        expect(response.data[0].id).toBe(projectId);
+      });
+
+    await request(server)
       .post(`/api/v1/projects/${projectId}/unarchive`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .expect(200)

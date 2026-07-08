@@ -6,10 +6,11 @@ import {
 } from "@tanstack/react-query";
 
 import {
+  archiveProject,
   createProject,
-  deleteProject,
   getProjectById,
   getProjects,
+  restoreProject,
   updateProject,
 } from "../api/projectsApi";
 import type { Project } from "./types";
@@ -69,10 +70,20 @@ export function useUpdateProject() {
   });
 }
 
-export function useDeleteProject() {
+export function useArchiveProject() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => deleteProject(id),
+    mutationFn: (id: string) => archiveProject(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: projectsKeys.all });
+    },
+  });
+}
+
+export function useRestoreProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => restoreProject(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: projectsKeys.all });
     },
