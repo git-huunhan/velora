@@ -28,14 +28,18 @@ import {
   ProjectMemberResponse,
   ProjectResponse,
   TaskResponse,
+  CommentResponse,
 } from '../domain/contracts';
 import { MoveColumnDto, MoveTaskDto } from '../domain/dto/move-task.dto';
+import { ActivityListResponse } from './contracts/activity-list.contract';
+import { CommentListResponse } from './contracts/comment-list.contract';
 import { KanbanColumnListResponse } from './contracts/kanban-column-list.contract';
 import { ProjectListResponse } from './contracts/project-list.contract';
 import { ProjectMemberListResponse } from './contracts/project-member-list.contract';
 import { TaskListResponse } from './contracts/task-list.contract';
 import { AddProjectMemberDto } from './dto/add-project-member.dto';
 import { CreateKanbanColumnDto } from './dto/create-kanban-column.dto';
+import { CreateCommentDto } from './dto/create-comment.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateKanbanColumnDto } from './dto/update-kanban-column.dto';
@@ -293,6 +297,45 @@ export class ProjectsController {
     @Body() input: MoveTaskDto,
   ): Promise<TaskResponse> {
     return this.projectsService.moveTask(user.sub, projectId, taskId, input);
+  }
+
+  @Get(':id/tasks/:taskId/comments')
+  @ApiOperation({ summary: 'List task comments' })
+  @ApiOkResponse({ type: CommentListResponse })
+  listTaskComments(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+  ): Promise<CommentListResponse> {
+    return this.projectsService.listTaskComments(user.sub, projectId, taskId);
+  }
+
+  @Post(':id/tasks/:taskId/comments')
+  @ApiOperation({ summary: 'Create a task comment' })
+  @ApiCreatedResponse({ type: CommentResponse })
+  createTaskComment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+    @Body() input: CreateCommentDto,
+  ): Promise<CommentResponse> {
+    return this.projectsService.createTaskComment(
+      user.sub,
+      projectId,
+      taskId,
+      input,
+    );
+  }
+
+  @Get(':id/tasks/:taskId/activities')
+  @ApiOperation({ summary: 'List task activities' })
+  @ApiOkResponse({ type: ActivityListResponse })
+  listTaskActivities(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+  ): Promise<ActivityListResponse> {
+    return this.projectsService.listTaskActivities(user.sub, projectId, taskId);
   }
 
   @Delete(':id/tasks/:taskId')

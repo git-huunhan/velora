@@ -5,11 +5,15 @@ import { AppModule } from '../src/app.module';
 import type { AuthResponse } from '../src/auth/contracts/auth.contract';
 import { PrismaService } from '../src/database/prisma.service';
 import type {
+  ActivityResponse,
+  CommentResponse,
   KanbanColumnResponse,
   ProjectMemberResponse,
   ProjectResponse,
   TaskResponse,
 } from '../src/domain/contracts';
+import type { ActivityListResponse } from '../src/projects/contracts/activity-list.contract';
+import type { CommentListResponse } from '../src/projects/contracts/comment-list.contract';
 import type { KanbanColumnListResponse } from '../src/projects/contracts/kanban-column-list.contract';
 import type { ProjectListResponse } from '../src/projects/contracts/project-list.contract';
 import type { ProjectMemberListResponse } from '../src/projects/contracts/project-member-list.contract';
@@ -291,6 +295,27 @@ describe('Projects API integration', () => {
     const subtask = subtaskResponse.body as TaskResponse;
     expect(subtask.parentId).toBe(task.id);
 
+    const commentResponse = await request(server)
+      .post(`/api/v1/projects/${projectId}/tasks/${task.id}/comments`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ body: 'Looks good for the first backend pass.' })
+      .expect(201);
+    const comment = commentResponse.body as CommentResponse;
+    expect(comment).toMatchObject({
+      body: 'Looks good for the first backend pass.',
+      taskId: task.id,
+    });
+    expect(comment.author.name).toBe('Project Owner');
+
+    await request(server)
+      .get(`/api/v1/projects/${projectId}/tasks/${task.id}/comments`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as CommentListResponse;
+        expect(response.data.map((item) => item.id)).toContain(comment.id);
+      });
+
     await request(server)
       .get(`/api/v1/projects/${projectId}/tasks/${task.id}`)
       .set('Authorization', `Bearer ${ownerToken}`)
@@ -348,6 +373,29 @@ describe('Projects API integration', () => {
       columnId: inProgressColumn.id,
       parentId: epic.id,
     });
+
+    await request(server)
+      .get(`/api/v1/projects/${projectId}/tasks/${task.id}/activities`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ActivityListResponse;
+        const fields = response.data.map(
+          (activity: ActivityResponse) => activity.field,
+        );
+        expect(fields).toEqual(
+          expect.arrayContaining([
+            'created',
+            'commented',
+            'title',
+            'description',
+            'priority',
+            'dueDate',
+            'columnId',
+            'rank',
+          ]),
+        );
+      });
 
     await request(server)
       .post(`/api/v1/projects/${projectId}/tasks/${task.id}/move`)

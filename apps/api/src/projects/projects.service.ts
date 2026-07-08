@@ -32,12 +32,17 @@ import {
   type Prisma,
 } from '../generated/prisma/client';
 import type { MoveColumnDto, MoveTaskDto } from '../domain/dto/move-task.dto';
+import { toActivityResponse } from './activity.mapper';
+import type { ActivityListResponse } from './contracts/activity-list.contract';
+import type { CommentListResponse } from './contracts/comment-list.contract';
 import type { KanbanColumnListResponse } from './contracts/kanban-column-list.contract';
 import type { ProjectListResponse } from './contracts/project-list.contract';
 import type { ProjectMemberListResponse } from './contracts/project-member-list.contract';
 import type { TaskListResponse } from './contracts/task-list.contract';
+import { toCommentResponse } from './comment.mapper';
 import type { AddProjectMemberDto } from './dto/add-project-member.dto';
 import type { CreateKanbanColumnDto } from './dto/create-kanban-column.dto';
+import type { CreateCommentDto } from './dto/create-comment.dto';
 import type { UpdateKanbanColumnDto } from './dto/update-kanban-column.dto';
 import type { CreateProjectDto } from './dto/create-project.dto';
 import type { CreateTaskDto } from './dto/create-task.dto';
@@ -79,6 +84,11 @@ const priorityToPrisma = {
   [ApiTaskPriority.LOW]: PrismaTaskPriority.LOW,
   [ApiTaskPriority.MEDIUM]: PrismaTaskPriority.MEDIUM,
 } as const;
+const priorityToApi = {
+  HIGH: ApiTaskPriority.HIGH,
+  LOW: ApiTaskPriority.LOW,
+  MEDIUM: ApiTaskPriority.MEDIUM,
+} as const;
 const taskTypeToPrisma = {
   [ApiTaskType.BUG]: PrismaTaskType.BUG,
   [ApiTaskType.EPIC]: PrismaTaskType.EPIC,
@@ -99,6 +109,12 @@ function columnRankAt(index: number): string {
 function taskRankAt(index: number): string {
   return `a${String(index).padStart(8, '0')}`;
 }
+
+type ActivityChange = {
+  field: string;
+  from: string | null;
+  to: string | null;
+};
 
 @Injectable()
 export class ProjectsService {
@@ -570,23 +586,33 @@ export class ProjectsService {
       this.nextTaskRank(input.columnId),
     ]);
 
-    const task = await this.prisma.task.create({
-      data: {
-        assigneeId: input.assigneeId ?? null,
-        code,
-        columnId: input.columnId,
-        description: input.description?.trim() ?? '',
-        dueDate: input.dueDate ? new Date(input.dueDate) : null,
-        labels: this.normalizeLabels(input.labels),
-        parentId,
-        priority: priorityToPrisma[input.priority ?? ApiTaskPriority.MEDIUM],
-        projectId,
-        rank,
-        reporterId: userId,
-        title: input.title.trim(),
-        type: taskTypeToPrisma[type],
-      },
-      include: { assignee: true, reporter: true },
+    const task = await this.prisma.$transaction(async (transaction) => {
+      const createdTask = await transaction.task.create({
+        data: {
+          assigneeId: input.assigneeId ?? null,
+          code,
+          columnId: input.columnId,
+          description: input.description?.trim() ?? '',
+          dueDate: input.dueDate ? new Date(input.dueDate) : null,
+          labels: this.normalizeLabels(input.labels),
+          parentId,
+          priority: priorityToPrisma[input.priority ?? ApiTaskPriority.MEDIUM],
+          projectId,
+          rank,
+          reporterId: userId,
+          title: input.title.trim(),
+          type: taskTypeToPrisma[type],
+        },
+        include: { assignee: true, reporter: true },
+      });
+      await this.createActivity(transaction, {
+        actorId: userId,
+        field: 'created',
+        from: null,
+        taskId: createdTask.id,
+        to: createdTask.code,
+      });
+      return createdTask;
     });
     return toTaskResponse(task);
   }
@@ -656,13 +682,22 @@ export class ProjectsService {
       data.dueDate = input.dueDate ? new Date(input.dueDate) : null;
     }
 
-    return toTaskResponse(
-      await this.prisma.task.update({
+    const updated = await this.prisma.$transaction(async (transaction) => {
+      const updatedTask = await transaction.task.update({
         where: { id: taskId },
         data,
         include: { assignee: true, reporter: true },
-      }),
-    );
+      });
+      await this.createActivities(
+        transaction,
+        userId,
+        taskId,
+        this.collectTaskUpdateActivities(existing, updatedTask),
+      );
+      return updatedTask;
+    });
+
+    return toTaskResponse(updated);
   }
 
   async moveTask(
@@ -758,13 +793,93 @@ export class ProjectsService {
         });
       }
 
-      return transaction.task.findUniqueOrThrow({
+      const movedTask = await transaction.task.findUniqueOrThrow({
         where: { id: taskId },
         include: { assignee: true, reporter: true },
       });
+      await this.createActivities(
+        transaction,
+        userId,
+        taskId,
+        this.collectTaskUpdateActivities(movingTask, movedTask),
+      );
+      return movedTask;
     });
 
     return toTaskResponse(moved);
+  }
+
+  async listTaskComments(
+    userId: string,
+    projectId: string,
+    taskId: string,
+  ): Promise<CommentListResponse> {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.READ_WORK_ITEMS,
+    );
+    await this.getTaskOrThrow(projectId, taskId);
+    const comments = await this.prisma.comment.findMany({
+      where: { taskId },
+      include: { author: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return { data: comments.map(toCommentResponse) };
+  }
+
+  async createTaskComment(
+    userId: string,
+    projectId: string,
+    taskId: string,
+    input: CreateCommentDto,
+  ) {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.UPDATE_WORK_ITEMS,
+    );
+    await this.getTaskOrThrow(projectId, taskId);
+
+    const comment = await this.prisma.$transaction(async (transaction) => {
+      const createdComment = await transaction.comment.create({
+        data: {
+          authorId: userId,
+          body: input.body.trim(),
+          taskId,
+        },
+        include: { author: true },
+      });
+      await this.createActivity(transaction, {
+        actorId: userId,
+        field: 'commented',
+        from: null,
+        taskId,
+        to: createdComment.id,
+      });
+      return createdComment;
+    });
+
+    return toCommentResponse(comment);
+  }
+
+  async listTaskActivities(
+    userId: string,
+    projectId: string,
+    taskId: string,
+  ): Promise<ActivityListResponse> {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.READ_WORK_ITEMS,
+    );
+    await this.getTaskOrThrow(projectId, taskId);
+    const activities = await this.prisma.activity.findMany({
+      where: { taskId },
+      include: { actor: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return { data: activities.map(toActivityResponse) };
   }
 
   async deleteTask(
@@ -848,6 +963,122 @@ export class ProjectsService {
       throw new NotFoundException('The task was not found.');
     }
     return task;
+  }
+
+  private collectTaskUpdateActivities(
+    previous: {
+      assigneeId: string | null;
+      columnId: string;
+      description: string;
+      dueDate: Date | null;
+      labels: string[];
+      parentId: string | null;
+      priority: PrismaTaskPriority;
+      rank: string;
+      title: string;
+      type: PrismaTaskType;
+    },
+    next: {
+      assigneeId: string | null;
+      columnId: string;
+      description: string;
+      dueDate: Date | null;
+      labels: string[];
+      parentId: string | null;
+      priority: PrismaTaskPriority;
+      rank: string;
+      title: string;
+      type: PrismaTaskType;
+    },
+  ): ActivityChange[] {
+    const fields: Array<{
+      field: string;
+      from: string | null;
+      to: string | null;
+    }> = [
+      {
+        field: 'columnId',
+        from: previous.columnId,
+        to: next.columnId,
+      },
+      {
+        field: 'parentId',
+        from: previous.parentId,
+        to: next.parentId,
+      },
+      {
+        field: 'assigneeId',
+        from: previous.assigneeId,
+        to: next.assigneeId,
+      },
+      {
+        field: 'title',
+        from: previous.title,
+        to: next.title,
+      },
+      {
+        field: 'description',
+        from: previous.description,
+        to: next.description,
+      },
+      {
+        field: 'type',
+        from: taskTypeToApi[previous.type],
+        to: taskTypeToApi[next.type],
+      },
+      {
+        field: 'priority',
+        from: priorityToApi[previous.priority],
+        to: priorityToApi[next.priority],
+      },
+      {
+        field: 'labels',
+        from: JSON.stringify(previous.labels),
+        to: JSON.stringify(next.labels),
+      },
+      {
+        field: 'dueDate',
+        from: previous.dueDate?.toISOString() ?? null,
+        to: next.dueDate?.toISOString() ?? null,
+      },
+      {
+        field: 'rank',
+        from: previous.rank,
+        to: next.rank,
+      },
+    ];
+
+    return fields.filter((field) => field.from !== field.to);
+  }
+
+  private async createActivities(
+    transaction: Prisma.TransactionClient,
+    actorId: string,
+    taskId: string,
+    changes: ActivityChange[],
+  ): Promise<void> {
+    for (const change of changes) {
+      await this.createActivity(transaction, {
+        actorId,
+        field: change.field,
+        from: change.from,
+        taskId,
+        to: change.to,
+      });
+    }
+  }
+
+  private async createActivity(
+    transaction: Prisma.TransactionClient,
+    data: {
+      actorId: string;
+      field: string;
+      from: string | null;
+      taskId: string;
+      to: string | null;
+    },
+  ): Promise<void> {
+    await transaction.activity.create({ data });
   }
 
   private async assertProjectMemberExists(

@@ -13,11 +13,14 @@ import {
 import { UserListResponse } from '../users/contracts/user-list.contract';
 import { UpdateProfileDto } from '../users/dto/update-profile.dto';
 import { KanbanColumnListResponse } from '../projects/contracts/kanban-column-list.contract';
+import { ActivityListResponse } from '../projects/contracts/activity-list.contract';
+import { CommentListResponse } from '../projects/contracts/comment-list.contract';
 import { ProjectListResponse } from '../projects/contracts/project-list.contract';
 import { ProjectMemberListResponse } from '../projects/contracts/project-member-list.contract';
 import { TaskListResponse } from '../projects/contracts/task-list.contract';
 import { AddProjectMemberDto } from '../projects/dto/add-project-member.dto';
 import { CreateKanbanColumnDto } from '../projects/dto/create-kanban-column.dto';
+import { CreateCommentDto } from '../projects/dto/create-comment.dto';
 import { CreateProjectDto } from '../projects/dto/create-project.dto';
 import { CreateTaskDto } from '../projects/dto/create-task.dto';
 import { UpdateKanbanColumnDto } from '../projects/dto/update-kanban-column.dto';
@@ -49,12 +52,15 @@ export function createOpenApiDocument(app: INestApplication): OpenAPIObject {
   return SwaggerModule.createDocument(app, config, {
     extraModels: [
       ActivityResponse,
+      ActivityListResponse,
       AddProjectMemberDto,
       ApiErrorResponse,
       AuthResponse,
       AuthTokensResponse,
       CommentResponse,
+      CommentListResponse,
       CreateKanbanColumnDto,
+      CreateCommentDto,
       CreateProjectDto,
       CreateTaskDto,
       KanbanColumnListResponse,
