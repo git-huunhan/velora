@@ -1,6 +1,12 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
+import {
+  draggable,
+  dropTargetForElements,
+} from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
+import { setCustomNativeDragPreview } from "@atlaskit/pragmatic-drag-and-drop/element/set-custom-native-drag-preview";
+import { preserveOffsetOnSource } from "@atlaskit/pragmatic-drag-and-drop/element/preserve-offset-on-source";
+
 import {
   AlertTriangle,
   Bug,
@@ -12,6 +18,9 @@ import {
   Paperclip,
   SquaresExclude,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { flushSync } from "react-dom";
 import { useParams } from "react-router-dom";
 import type { Task, TaskUpdateData } from "../../model/types";
 import { useTasksByProject } from "../../model/useTasks";
@@ -46,26 +55,95 @@ export function TaskCard({
     showComment,
     showAttachment,
   } = useViewSettingsStore();
-  const {
-    setNodeRef,
-    attributes,
-    listeners,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
-    id: task.id,
-    data: {
-      type: "Task",
-      task,
-    },
-    disabled: task.isPending,
-  });
+  const dragRef = useRef<HTMLDivElement>(null); // inner card - drag source & preview
+  const dropRef = useRef<HTMLDivElement>(null); // outer wrapper - drop target (covers pb-2.5 gap)
+  const [isDragging, setIsDragging] = useState(false);
+  const [previewContainer, setPreviewContainer] = useState<HTMLElement | null>(
+    null,
+  );
+  const [previewWidth, setPreviewWidth] = useState(280);
 
-  const style = {
-    transition,
-    transform: CSS.Transform.toString(transform),
-  };
+  useEffect(() => {
+    const element = dragRef.current;
+    const dropElement = dropRef.current;
+    if (!element || !dropElement || task.isPending) return;
+
+    return combine(
+      draggable({
+        element,
+        getInitialData: ({ input }) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            entityType: "task-card",
+            taskId: task.id,
+            offsetY: input.clientY - rect.top,
+            cardHeight: rect.height,
+          };
+        },
+        onGenerateDragPreview: ({ nativeSetDragImage, location }) => {
+          setCustomNativeDragPreview({
+            nativeSetDragImage,
+            getOffset: preserveOffsetOnSource({
+              element,
+              input: location.current.input,
+            }),
+            render({ container }) {
+              // flushSync ensures React renders the portal synchronously
+              // so the browser can capture it as the drag image
+              const width = element.getBoundingClientRect().width;
+              flushSync(() => {
+                setPreviewWidth(width || 280);
+                setPreviewContainer(container);
+              });
+              return () => setPreviewContainer(null);
+            },
+          });
+        },
+        onDragStart: () => setIsDragging(true),
+        onDrop: () => {
+          setIsDragging(false);
+          setPreviewContainer(null);
+        },
+      }),
+      dropTargetForElements({
+        // Use outer wrapper as drop zone so the pb-2.5 gap is also covered - no dead zones
+        element: dropElement,
+        canDrop: ({ source }) =>
+          source.data.entityType === "task-card" &&
+          source.data.taskId !== task.id,
+        getData: ({ input, source }) => {
+          // Use the inner card's center for edge calculation (not the outer wrapper)
+          const cardRect = dragRef.current?.getBoundingClientRect();
+          if (!cardRect)
+            return {
+              entityType: "task-card",
+              taskId: task.id,
+              manualEdge: "bottom",
+            };
+
+          let pointerY = input.clientY;
+          if (
+            source &&
+            typeof source.data.offsetY === "number" &&
+            typeof source.data.cardHeight === "number"
+          ) {
+            const ghostTop = input.clientY - source.data.offsetY;
+            pointerY = ghostTop + source.data.cardHeight / 2;
+          }
+
+          const midY = cardRect.top + cardRect.height / 2;
+          const edge = pointerY < midY ? "top" : "bottom";
+
+          return {
+            entityType: "task-card",
+            taskId: task.id,
+            manualEdge: edge,
+          };
+        },
+        getDropEffect: () => "move",
+      }),
+    );
+  }, [task.id, task.isPending]);
 
   const { id } = useParams<{ id: string }>();
   const { data: tasks = [] } = useTasksByProject(id || "");
@@ -253,42 +331,39 @@ export function TaskCard({
     );
   }
 
-  if (isDragging) {
-    return (
-      <div
-        ref={setNodeRef}
-        style={style}
-        className="relative mb-2.5 flex flex-col rounded-xl border border-transparent p-3 opacity-0 pointer-events-none"
-      >
-        {cardContent}
-      </div>
-    );
-  }
-
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...(task.isPending ? {} : attributes)}
-      {...(task.isPending ? {} : listeners)}
-      onClick={() => onClick(task)}
-      className={`group relative flex flex-col rounded-xl border border-border/50 bg-card text-card-foreground p-3 mb-2.5 transition-all duration-200 ${
-        task.isPending
-          ? "opacity-60 cursor-default"
-          : "cursor-grab hover:border-border/80 hover:shadow-sm"
-      }`}
-    >
-      {!task.isPending && (
-        <div className="absolute top-2 right-2 z-10">
-          <TaskCardActions
-            task={task}
-            onOpen={onClick}
-            onUpdate={onUpdate}
-            onDelete={onDelete}
-          />
+    <>
+      <div ref={dropRef} className="relative pb-2.5">
+        <div
+          ref={dragRef}
+          data-task-card-id={task.id}
+          onClick={() => onClick(task)}
+          className={`group relative flex flex-col rounded-xl border border-border/50 bg-card text-card-foreground p-3 transition-colors duration-200 hover:border-primary/40 hover:shadow-md cursor-grab active:cursor-grabbing ${task.isPending ? "opacity-50 pointer-events-none" : ""} ${isDragging ? "opacity-40" : ""}`}
+        >
+          {!task.isPending && (
+            <div className="absolute top-2 right-2 z-10">
+              <TaskCardActions
+                task={task}
+                onOpen={onClick}
+                onUpdate={onUpdate}
+                onDelete={onDelete}
+              />
+            </div>
+          )}
+          {cardContent}
         </div>
-      )}
-      {cardContent}
-    </div>
+      </div>
+
+      {previewContainer &&
+        createPortal(
+          <div
+            className="flex flex-col rounded-xl border border-primary/50 bg-card text-card-foreground p-3 shadow-2xl cursor-grabbing"
+            style={{ width: previewWidth }}
+          >
+            {cardContent}
+          </div>,
+          previewContainer,
+        )}
+    </>
   );
 }

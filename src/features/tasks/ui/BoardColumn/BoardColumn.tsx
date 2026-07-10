@@ -1,9 +1,9 @@
-import { useDroppable } from "@dnd-kit/core";
 import {
-  SortableContext,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { useEffect, useRef, useState } from "react";
+  dropTargetForElements,
+  monitorForElements,
+} from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
+import { autoScrollForElements } from "@atlaskit/pragmatic-drag-and-drop-auto-scroll/element";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   KanbanColumn,
   Task,
@@ -13,6 +13,8 @@ import type {
 import { TaskCard } from "../TaskCard/TaskCard";
 import { QuickCreateInput } from "../shared/QuickCreateInput";
 import { ColumnActionsMenu } from "./ColumnActionsMenu";
+
+const TASK_DROP_GAP_OFFSET = 5;
 
 interface BoardColumnProps {
   columnId: TaskStatus;
@@ -69,14 +71,191 @@ export function BoardColumn({
   dropIndicatorSide,
   onCreateTask,
 }: BoardColumnProps) {
-  const { setNodeRef } = useDroppable({
-    id: droppableId || columnId,
-    data: {
-      type: "Column",
-      column: columnId,
-      groupId: groupId,
+  const [columnDropIndicatorY, setColumnDropIndicatorY] = useState<
+    number | null
+  >(null);
+  const columnBodyRef = useRef<HTMLDivElement>(null);
+  const columnRef = useRef<HTMLDivElement>(null);
+  const columnScrollRef = useRef<HTMLDivElement>(null);
+
+  const getColumnDropData = useCallback(
+    ({
+      input,
+      source,
+    }: {
+      input: { clientY: number };
+      source: { data: Record<string | symbol, unknown> };
+    }) => {
+      const bodyElement = columnBodyRef.current;
+      const sourceTaskId = String(source.data.taskId ?? "");
+      const baseData = {
+        entityType: "task-column",
+        column: columnId,
+        droppableId: droppableId || columnId,
+        groupId,
+      };
+
+      if (!bodyElement) {
+        return { ...baseData, columnEdge: "top" as const, indicatorY: 12 };
+      }
+
+      const cardElements = Array.from(
+        bodyElement.querySelectorAll<HTMLElement>("[data-task-card-id]"),
+      ).filter(
+        (cardElement) => cardElement.dataset.taskCardId !== sourceTaskId,
+      );
+
+      if (cardElements.length === 0) {
+        return { ...baseData, columnEdge: "top" as const, indicatorY: 12 };
+      }
+
+      let ghostCenterY = input.clientY;
+      if (
+        typeof source.data.offsetY === "number" &&
+        typeof source.data.cardHeight === "number"
+      ) {
+        ghostCenterY =
+          input.clientY - source.data.offsetY + source.data.cardHeight / 2;
+      }
+
+      const nearest = cardElements.reduce<{
+        taskId: string;
+        edge: "top" | "bottom";
+        edgeY: number;
+        distance: number;
+      } | null>((closest, cardElement) => {
+        const taskId = cardElement.dataset.taskCardId;
+        if (!taskId) return closest;
+
+        const rect = cardElement.getBoundingClientRect();
+        const edge =
+          ghostCenterY < rect.top + rect.height / 2 ? "top" : "bottom";
+        const edgeY = edge === "top" ? rect.top : rect.bottom;
+        const distance = Math.abs(ghostCenterY - edgeY);
+
+        if (!closest || distance < closest.distance) {
+          return { taskId, edge, edgeY, distance };
+        }
+
+        return closest;
+      }, null);
+
+      if (!nearest) {
+        return { ...baseData, columnEdge: "top" as const, indicatorY: 12 };
+      }
+
+      const bodyRect = bodyElement.getBoundingClientRect();
+      const indicatorEdgeY =
+        nearest.edge === "bottom"
+          ? nearest.edgeY + TASK_DROP_GAP_OFFSET
+          : nearest.edgeY - TASK_DROP_GAP_OFFSET;
+      const indicatorY = Math.min(
+        Math.max(indicatorEdgeY - bodyRect.top, 12),
+        Math.max(bodyRect.height - 12, 12),
+      );
+
+      return {
+        ...baseData,
+        columnEdge: nearest.edge,
+        nearestTaskId: nearest.taskId,
+        manualEdge: nearest.edge,
+        indicatorY,
+      };
     },
-  });
+    [columnId, droppableId, groupId],
+  );
+
+  useEffect(() => {
+    const element = columnScrollRef.current;
+    if (!element) return;
+
+    return autoScrollForElements({
+      element,
+      canScroll: ({ source }) => source.data.entityType === "task-card",
+      getAllowedAxis: () => "vertical",
+      getConfiguration: () => ({ maxScrollSpeed: "fast" }),
+    });
+  }, []);
+
+  useEffect(() => {
+    const element = columnBodyRef.current;
+    if (!element) return;
+
+    return dropTargetForElements({
+      element,
+      canDrop: ({ source }) => source.data.entityType === "task-card",
+      getData: getColumnDropData,
+      getDropEffect: () => "move",
+    });
+  }, [getColumnDropData]);
+
+  useEffect(() => {
+    const element = columnRef.current;
+    if (!element) return;
+
+    return dropTargetForElements({
+      element,
+      canDrop: ({ source }) => source.data.entityType === "task-card",
+      getData: getColumnDropData,
+      getDropEffect: () => "move",
+    });
+  }, [getColumnDropData]);
+
+  useEffect(() => {
+    return monitorForElements({
+      onDrag({ location }) {
+        const dropTargets = location.current.dropTargets;
+        const bodyElement = columnBodyRef.current;
+        if (!bodyElement) {
+          setColumnDropIndicatorY(null);
+          return;
+        }
+
+        const cardTarget = dropTargets.find(
+          (dropTarget) => dropTarget.data?.entityType === "task-card",
+        );
+        if (cardTarget) {
+          const taskId = String(cardTarget.data.taskId ?? "");
+          const cardElement = bodyElement.querySelector<HTMLElement>(
+            '[data-task-card-id="' + taskId + '"]',
+          );
+          if (!cardElement) {
+            setColumnDropIndicatorY(null);
+            return;
+          }
+
+          const bodyRect = bodyElement.getBoundingClientRect();
+          const cardRect = cardElement.getBoundingClientRect();
+          const edge =
+            cardTarget.data.manualEdge === "bottom" ? "bottom" : "top";
+          const edgeY =
+            edge === "bottom"
+              ? cardRect.bottom + TASK_DROP_GAP_OFFSET
+              : cardRect.top - TASK_DROP_GAP_OFFSET;
+          const indicatorY = Math.min(
+            Math.max(edgeY - bodyRect.top, 12),
+            Math.max(bodyRect.height - 12, 12),
+          );
+          setColumnDropIndicatorY(indicatorY);
+          return;
+        }
+
+        const deepest = dropTargets[0];
+        const isThisColumnDeepest =
+          deepest?.data?.entityType === "task-column" &&
+          deepest?.data?.column === columnId;
+        const indicatorY = deepest?.data?.indicatorY;
+        setColumnDropIndicatorY(
+          isThisColumnDeepest && typeof indicatorY === "number"
+            ? indicatorY
+            : null,
+        );
+      },
+      onDrop() {
+        setColumnDropIndicatorY(null);
+      },
+    });
+  }, [columnId]);
 
   const [isCreating, setIsCreating] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -93,7 +272,10 @@ export function BoardColumn({
   };
 
   return (
-    <div className="group/column relative flex flex-col rounded-xl border bg-muted/50 min-w-70 w-70 shrink-0 mr-6 last:mr-0 pb-2">
+    <div
+      ref={columnRef}
+      className="group/column relative flex flex-col rounded-xl border bg-muted/50 min-w-70 w-70 shrink-0 mr-6 last:mr-0 pb-2"
+    >
       {isFirstColumn && (
         <div
           onDragEnter={() => onColumnDragOver("before")}
@@ -189,22 +371,30 @@ export function BoardColumn({
         />
       </div>
 
-      <div className="flex-1 min-h-[50px] overflow-y-auto overflow-x-hidden custom-scrollbar">
-        <div ref={setNodeRef} className="flex flex-col p-3 min-h-full">
-          <SortableContext
-            items={tasks.map((t) => t.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            {tasks.map((task) => (
-              <TaskCard
-                key={task.id}
-                task={task}
-                onClick={onTaskClick}
-                onUpdate={onTaskUpdate}
-                onDelete={onTaskDelete}
-              />
-            ))}
-          </SortableContext>
+      <div
+        ref={columnScrollRef}
+        className="flex-1 min-h-[50px] overflow-y-auto overflow-x-hidden custom-scrollbar"
+      >
+        <div
+          ref={columnBodyRef}
+          className="relative flex flex-col p-3 min-h-full"
+        >
+          {columnDropIndicatorY !== null && (
+            <div
+              className="absolute left-3 right-3 h-0.5 -translate-y-1/2 rounded-full bg-primary shadow-[0_0_8px_var(--primary)] pointer-events-none z-50"
+              style={{ top: columnDropIndicatorY }}
+            />
+          )}
+
+          {tasks.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              onClick={onTaskClick}
+              onUpdate={onTaskUpdate}
+              onDelete={onTaskDelete}
+            />
+          ))}
 
           {onCreateTask && (
             <div

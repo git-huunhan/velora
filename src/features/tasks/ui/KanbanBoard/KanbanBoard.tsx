@@ -1,14 +1,5 @@
-import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
-import {
-  DndContext,
-  DragOverlay,
-  KeyboardSensor,
-  PointerSensor,
-  pointerWithin,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
+
 import {
   Bug,
   ChevronDown,
@@ -19,7 +10,6 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { useIsMutating } from "@tanstack/react-query";
 
@@ -48,7 +38,6 @@ import {
 } from "../../model/taskHierarchy";
 import { filterTasks, mergeServerTasks } from "../../model/taskViewUtils";
 import { BoardColumn } from "../BoardColumn/BoardColumn";
-import { TaskCard } from "../TaskCard/TaskCard";
 import { TaskDetailModal } from "../TaskDetailModal/TaskDetailModal";
 import { TaskFormModal } from "../TaskFormModal/TaskFormModal";
 import type { TaskFormData } from "../TaskFormModal/TaskFormModal";
@@ -306,7 +295,6 @@ export function KanbanBoard({
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const previousLocalTasksRef = useRef<Task[]>([]);
-  const lastDragOverSignatureRef = useRef<string | null>(null);
   const [draggingGroups, setDraggingGroups] = useState<{
     grouped: string[];
     hasUngrouped: boolean;
@@ -314,6 +302,49 @@ export function KanbanBoard({
     grouped: [],
     hasUngrouped: false,
   });
+
+  useEffect(() => {
+    if (!activeId) return;
+
+    const edgeSize = 128;
+    const scrollSpeed = 12;
+    let latestClientX: number | null = null;
+    let animationFrameId = 0;
+
+    const tick = () => {
+      const scrollContainer = scrollContainerRef.current;
+      if (scrollContainer && latestClientX !== null) {
+        const rect = scrollContainer.getBoundingClientRect();
+        const leftDistance = latestClientX - rect.left;
+        const rightDistance = rect.right - latestClientX;
+        let scrollDelta = 0;
+
+        if (leftDistance < edgeSize) {
+          scrollDelta = -scrollSpeed;
+        } else if (rightDistance < edgeSize) {
+          scrollDelta = scrollSpeed;
+        }
+
+        if (scrollDelta !== 0) {
+          scrollContainer.scrollLeft += scrollDelta;
+        }
+      }
+
+      animationFrameId = window.requestAnimationFrame(tick);
+    };
+
+    const handleTaskDragOver = (event: DragEvent) => {
+      latestClientX = event.clientX;
+    };
+
+    window.addEventListener("dragover", handleTaskDragOver);
+    animationFrameId = window.requestAnimationFrame(tick);
+
+    return () => {
+      window.removeEventListener("dragover", handleTaskDragOver);
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [activeId]);
 
   useEffect(() => {
     if (!draggedColumnId) return;
@@ -351,311 +382,384 @@ export function KanbanBoard({
     window.addEventListener("dragover", handleColumnDragOver);
     return () => window.removeEventListener("dragover", handleColumnDragOver);
   }, [draggedColumnId]);
+  const captureDraggingGroups = useCallback(
+    (tasks: Task[]) => {
+      const currentGroups = new Set<string>();
+      let currentHasUngrouped = false;
+      const visibleTasks = filterTasks(tasks, {
+        searchQuery,
+        parentIds,
+        assigneeIds,
+        priorities,
+        statuses,
+        workTypes,
+        labels,
+        hideEpics: true,
+        supportNoParent: true,
+        labelMatch: "any",
+      });
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
+      visibleTasks.forEach((task) => {
+        if (groupBy === "Assignee") {
+          if (task.assigneeId) currentGroups.add(task.assigneeId);
+          else currentHasUngrouped = true;
+        } else if (groupBy === "Epic" || groupBy === "Subtask") {
+          const laneId = getTaskLaneId(task, tasks, groupBy);
+          if (laneId) currentGroups.add(laneId);
+          else currentHasUngrouped = true;
+        }
+      });
+
+      setDraggingGroups({
+        grouped: Array.from(currentGroups),
+        hasUngrouped: currentHasUngrouped,
+      });
+    },
+    [
+      assigneeIds,
+      groupBy,
+      labels,
+      parentIds,
+      priorities,
+      searchQuery,
+      statuses,
+      workTypes,
+    ],
   );
-  const onDragStart = (event: DragStartEvent) => {
-    isDraggingRef.current = true; // set ref BEFORE setActiveId (synchronous)
-    setActiveId(event.active.id as string);
-    lastDragOverSignatureRef.current = null;
-    previousLocalTasksRef.current = localTasks;
 
-    // Capture currently visible groups to keep them alive during drag
-    const currentGroups = new Set<string>();
-    let currentHasUngrouped = false;
+  const getDroppedTaskPreview = useCallback(
+    (
+      activeTaskId: string,
+      targetData: Record<string | symbol, unknown> | undefined,
+      sourceTasks: Task[],
+    ) => {
+      if (!targetData) return sourceTasks;
 
-    filteredTasks.forEach((t) => {
-      if (groupBy === "Assignee") {
-        if (t.assigneeId) currentGroups.add(t.assigneeId);
-        else currentHasUngrouped = true;
-      } else if (groupBy === "Epic" || groupBy === "Subtask") {
-        const laneId = getTaskLaneId(t, localTasks, groupBy);
-        if (laneId) currentGroups.add(laneId);
-        else currentHasUngrouped = true;
+      let effectiveTargetData = targetData;
+      let targetType = effectiveTargetData.entityType;
+
+      if (targetType === "task-column" && effectiveTargetData.nearestTaskId) {
+        effectiveTargetData = {
+          ...effectiveTargetData,
+          entityType: "task-card",
+          taskId: String(effectiveTargetData.nearestTaskId),
+          manualEdge:
+            effectiveTargetData.manualEdge === "bottom" ? "bottom" : "top",
+        };
+        targetType = "task-card";
       }
-    });
 
-    setDraggingGroups({
-      grouped: Array.from(currentGroups),
-      hasUngrouped: currentHasUngrouped,
-    });
-  };
+      const activeIndex = sourceTasks.findIndex(
+        (task) => task.id === activeTaskId,
+      );
 
-  const getDroppedTaskPreview = (event: DragEndEvent, sourceTasks: Task[]) => {
-    const { active, over } = event;
-    if (
-      !over ||
-      active.id === over.id ||
-      active.data.current?.type !== "Task"
-    ) {
+      if (activeIndex < 0) return sourceTasks;
+
+      if (targetType === "task-card") {
+        const targetTaskId = String(effectiveTargetData.taskId ?? "");
+        if (!targetTaskId || targetTaskId === activeTaskId) return sourceTasks;
+
+        const overIndex = sourceTasks.findIndex(
+          (task) => task.id === targetTaskId,
+        );
+        if (overIndex < 0) return sourceTasks;
+
+        const activeTask = sourceTasks[activeIndex];
+        const overTask = sourceTasks[overIndex];
+        const newActiveTask = { ...activeTask, status: overTask.status };
+
+        if (groupBy === "Assignee") {
+          newActiveTask.assigneeId = overTask.assigneeId;
+          if (overTask.assigneeId) {
+            const newUser = mockUsers.find(
+              (user) => user.id === overTask.assigneeId,
+            );
+            newActiveTask.assignee = newUser
+              ? {
+                  id: newUser.id,
+                  name: newUser.name,
+                  avatarUrl: newUser.avatarUrl || "",
+                }
+              : activeTask.assignee;
+          } else {
+            newActiveTask.assignee = undefined;
+          }
+        } else if (groupBy === "Epic" || groupBy === "Subtask") {
+          const currentLaneId = getTaskLaneId(activeTask, sourceTasks, groupBy);
+          const targetLaneId = getTaskLaneId(overTask, sourceTasks, groupBy);
+
+          if (
+            groupBy === "Subtask" &&
+            isSubtask(activeTask, sourceTasks) &&
+            !targetLaneId
+          ) {
+            return sourceTasks;
+          }
+
+          const targetParentId =
+            currentLaneId === targetLaneId ||
+            (groupBy === "Subtask" && targetLaneId === activeTask.id)
+              ? activeTask.parentId
+              : targetLaneId;
+
+          if (
+            !validateParentAssignment(activeTask, targetParentId, sourceTasks)
+              .valid
+          ) {
+            return sourceTasks;
+          }
+
+          newActiveTask.parentId = targetParentId;
+        }
+
+        const nextTasks = [...sourceTasks];
+        const [activeTaskObj] = nextTasks.splice(activeIndex, 1);
+        Object.assign(activeTaskObj, newActiveTask);
+
+        const targetIndex = nextTasks.findIndex(
+          (task) => task.id === targetTaskId,
+        );
+        const closestEdge = effectiveTargetData.manualEdge as "top" | "bottom";
+        const insertIndex =
+          closestEdge === "bottom" ? targetIndex + 1 : targetIndex;
+
+        nextTasks.splice(insertIndex, 0, activeTaskObj);
+        return nextTasks;
+      }
+
+      if (targetType === "task-column") {
+        const activeTask = sourceTasks[activeIndex];
+        const overStatus = targetData.column as TaskStatus;
+        const overGroupId = targetData.groupId as string | undefined;
+        const newActiveTask = { ...activeTask, status: overStatus };
+
+        if (groupBy === "Assignee") {
+          const targetAssigneeId =
+            overGroupId === "ungrouped" ? undefined : overGroupId;
+          newActiveTask.assigneeId = targetAssigneeId;
+          if (targetAssigneeId) {
+            const newUser = mockUsers.find(
+              (user) => user.id === targetAssigneeId,
+            );
+            newActiveTask.assignee = newUser
+              ? {
+                  id: newUser.id,
+                  name: newUser.name,
+                  avatarUrl: newUser.avatarUrl || "",
+                }
+              : activeTask.assignee;
+          } else {
+            newActiveTask.assignee = undefined;
+          }
+        } else if (groupBy === "Epic" || groupBy === "Subtask") {
+          const currentLaneId = getTaskLaneId(activeTask, sourceTasks, groupBy);
+          const targetLaneId =
+            overGroupId === "ungrouped" ? undefined : overGroupId;
+
+          if (
+            groupBy === "Subtask" &&
+            isSubtask(activeTask, sourceTasks) &&
+            !targetLaneId
+          ) {
+            return sourceTasks;
+          }
+
+          const targetParentId =
+            currentLaneId === targetLaneId ||
+            (groupBy === "Subtask" && targetLaneId === activeTask.id)
+              ? activeTask.parentId
+              : targetLaneId;
+
+          if (
+            !validateParentAssignment(activeTask, targetParentId, sourceTasks)
+              .valid
+          ) {
+            return sourceTasks;
+          }
+
+          newActiveTask.parentId = targetParentId;
+        }
+
+        const nextTasks = [...sourceTasks];
+        const [activeTaskObj] = nextTasks.splice(activeIndex, 1);
+        Object.assign(activeTaskObj, newActiveTask);
+
+        if (targetData.columnEdge === "top") {
+          nextTasks.unshift(activeTaskObj);
+        } else {
+          nextTasks.push(activeTaskObj);
+        }
+
+        return nextTasks;
+      }
+
       return sourceTasks;
-    }
+    },
+    [groupBy],
+  );
 
-    const activeId = active.id;
-    const overId = over.id;
-    const isOverTask = over.data.current?.type === "Task";
-    const isOverColumn = over.data.current?.type === "Column";
-    const activeIndex = sourceTasks.findIndex((task) => task.id === activeId);
+  const persistDroppedTask = useCallback(
+    (activeTaskId: string, targetData?: Record<string | symbol, unknown>) => {
+      isDraggingRef.current = false;
+      setActiveId(null);
 
-    if (activeIndex < 0) return sourceTasks;
-
-    if (isOverTask) {
-      const overIndex = sourceTasks.findIndex((task) => task.id === overId);
-      if (overIndex < 0) return sourceTasks;
-
-      const activeTask = sourceTasks[activeIndex];
-      const overTask = sourceTasks[overIndex];
-      const newActiveTask = { ...activeTask, status: overTask.status };
-
-      if (groupBy === "Assignee") {
-        newActiveTask.assigneeId = overTask.assigneeId;
-        if (overTask.assigneeId) {
-          const newUser = mockUsers.find(
-            (user) => user.id === overTask.assigneeId,
-          );
-          newActiveTask.assignee = newUser
-            ? {
-                id: newUser.id,
-                name: newUser.name,
-                avatarUrl: newUser.avatarUrl || "",
-              }
-            : activeTask.assignee;
-        } else {
-          newActiveTask.assignee = undefined;
-        }
-      } else if (groupBy === "Epic" || groupBy === "Subtask") {
-        const currentLaneId = getTaskLaneId(activeTask, sourceTasks, groupBy);
-        const targetLaneId = getTaskLaneId(overTask, sourceTasks, groupBy);
-
-        if (
-          groupBy === "Subtask" &&
-          isSubtask(activeTask, sourceTasks) &&
-          !targetLaneId
-        ) {
-          return sourceTasks;
-        }
-
-        const targetParentId =
-          currentLaneId === targetLaneId ||
-          (groupBy === "Subtask" && targetLaneId === activeTask.id)
-            ? activeTask.parentId
-            : targetLaneId;
-
-        if (
-          !validateParentAssignment(activeTask, targetParentId, sourceTasks)
-            .valid
-        ) {
-          return sourceTasks;
-        }
-
-        newActiveTask.parentId = targetParentId;
+      if (!targetData) {
+        setLocalTasks(previousLocalTasksRef.current);
+        return;
       }
 
-      const nextTasks = [...sourceTasks];
-      const [activeTaskObj] = nextTasks.splice(activeIndex, 1);
-      Object.assign(activeTaskObj, newActiveTask);
+      const sourceTasks = previousLocalTasksRef.current.length
+        ? previousLocalTasksRef.current
+        : localTasks;
+      const droppedTasks = getDroppedTaskPreview(
+        activeTaskId,
+        targetData,
+        sourceTasks,
+      );
+      const updatedTask = droppedTasks.find((task) => task.id === activeTaskId);
+      if (!updatedTask) return;
 
-      const targetIndex = nextTasks.findIndex((task) => task.id === overId);
-      const activeCenterY = active.rect.current.translated
-        ? active.rect.current.translated.top +
-          active.rect.current.translated.height / 2
-        : null;
-      const overCenterY = over.rect.top + over.rect.height / 2;
-      const isBelowOverItem =
-        activeCenterY !== null && activeCenterY > overCenterY;
-      const insertIndex = isBelowOverItem ? targetIndex + 1 : targetIndex;
-
-      nextTasks.splice(insertIndex, 0, activeTaskObj);
-      return nextTasks;
-    }
-
-    if (isOverColumn) {
-      const activeTask = sourceTasks[activeIndex];
-      const overStatus = over.data.current?.column as TaskStatus;
-      const overGroupId = over.data.current?.groupId as string | undefined;
-      const newActiveTask = { ...activeTask, status: overStatus };
-
-      if (groupBy === "Assignee") {
-        const targetAssigneeId =
-          overGroupId === "ungrouped" ? undefined : overGroupId;
-        newActiveTask.assigneeId = targetAssigneeId;
-        if (targetAssigneeId) {
-          const newUser = mockUsers.find(
-            (user) => user.id === targetAssigneeId,
-          );
-          newActiveTask.assignee = newUser
-            ? {
-                id: newUser.id,
-                name: newUser.name,
-                avatarUrl: newUser.avatarUrl || "",
-              }
-            : activeTask.assignee;
-        } else {
-          newActiveTask.assignee = undefined;
-        }
-      } else if (groupBy === "Epic" || groupBy === "Subtask") {
-        const currentLaneId = getTaskLaneId(activeTask, sourceTasks, groupBy);
-        const targetLaneId =
-          overGroupId === "ungrouped" ? undefined : overGroupId;
-
-        if (
-          groupBy === "Subtask" &&
-          isSubtask(activeTask, sourceTasks) &&
-          !targetLaneId
-        ) {
-          return sourceTasks;
-        }
-
-        const targetParentId =
-          currentLaneId === targetLaneId ||
-          (groupBy === "Subtask" && targetLaneId === activeTask.id)
-            ? activeTask.parentId
-            : targetLaneId;
-
-        if (
-          !validateParentAssignment(activeTask, targetParentId, sourceTasks)
-            .valid
-        ) {
-          return sourceTasks;
-        }
-
-        newActiveTask.parentId = targetParentId;
-      }
-
-      const nextTasks = [...sourceTasks];
-      const [activeTaskObj] = nextTasks.splice(activeIndex, 1);
-      Object.assign(activeTaskObj, newActiveTask);
-      nextTasks.push(activeTaskObj);
-      return nextTasks;
-    }
-
-    return sourceTasks;
-  };
-
-  const onDragCancel = () => {
-    isDraggingRef.current = false;
-    lastDragOverSignatureRef.current = null;
-    setActiveId(null);
-    setLocalTasks(previousLocalTasksRef.current);
-  };
-
-  const onDragEnd = (event: DragEndEvent) => {
-    isDraggingRef.current = false; // reset ref immediately when drag ends
-    lastDragOverSignatureRef.current = null;
-    setActiveId(null);
-    const { active, over } = event;
-    if (!over) {
-      setLocalTasks(previousLocalTasksRef.current);
-      return;
-    }
-
-    const activeIdStr = active.id as string;
-    const sourceTasks = previousLocalTasksRef.current.length
-      ? previousLocalTasksRef.current
-      : localTasks;
-    const droppedTasks = getDroppedTaskPreview(event, sourceTasks);
-    const updatedTask = droppedTasks.find((t) => t.id === activeIdStr);
-    if (updatedTask) {
-      const originalTask = serverTasks.find((t) => t.id === activeIdStr);
+      const originalTask =
+        sourceTasks.find((task) => task.id === activeTaskId) ??
+        serverTasks.find((task) => task.id === activeTaskId);
       const dataToUpdate: TaskUpdateData = {};
 
-      if (originalTask) {
-        if (originalTask.status !== updatedTask.status) {
-          dataToUpdate.status = updatedTask.status;
-        }
-        if (
-          groupBy === "Assignee" &&
-          originalTask.assigneeId !== updatedTask.assigneeId
-        ) {
-          dataToUpdate.assigneeId =
-            updatedTask.assigneeId === undefined
-              ? null
-              : updatedTask.assigneeId;
-        } else if (
-          (groupBy === "Epic" || groupBy === "Subtask") &&
-          originalTask.parentId !== updatedTask.parentId
-        ) {
-          dataToUpdate.parentId =
-            updatedTask.parentId === undefined ? null : updatedTask.parentId;
-        }
+      if (!originalTask) return;
 
-        const laneTasks = droppedTasks.filter((task) =>
-          isTaskInSameLane(task, updatedTask, droppedTasks, groupBy),
-        );
-        const movedIndex = laneTasks.findIndex(
-          (task) => task.id === updatedTask.id,
-        );
-        const nextOrder = calculateTaskOrder(
-          laneTasks[movedIndex - 1]?.order,
-          laneTasks[movedIndex + 1]?.order,
-        );
-
-        if (nextOrder !== originalTask.order) {
-          dataToUpdate.order = nextOrder;
-        }
-
-        if (Object.keys(dataToUpdate).length > 0) {
-          setLocalTasks(
-            droppedTasks.map((task) =>
-              task.id === updatedTask.id ? { ...task, order: nextOrder } : task,
-            ),
-          );
-
-          const shouldMoveTask =
-            dataToUpdate.status !== undefined ||
-            dataToUpdate.parentId !== undefined ||
-            dataToUpdate.order !== undefined;
-
-          setIsDropPersisting(true);
-
-          if (shouldMoveTask) {
-            moveTask.mutate(
-              {
-                taskId: updatedTask.id,
-                data: {
-                  afterTaskId: laneTasks[movedIndex - 1]?.id,
-                  beforeTaskId: laneTasks[movedIndex + 1]?.id,
-                  targetColumnId: updatedTask.status,
-                  targetParentId: updatedTask.parentId ?? null,
-                },
-              },
-              {
-                onError: () => {
-                  setLocalTasks(previousLocalTasksRef.current);
-                  toast.error("Failed to save task position");
-                },
-                onSettled: () => {
-                  setIsDropPersisting(false);
-                },
-              },
-            );
-          } else {
-            updateTask.mutate(
-              { taskId: updatedTask.id, data: dataToUpdate },
-              {
-                onError: () => {
-                  setLocalTasks(previousLocalTasksRef.current);
-                  toast.error("Failed to save task position");
-                },
-                onSettled: () => {
-                  setIsDropPersisting(false);
-                },
-              },
-            );
-          }
-        }
+      if (originalTask.status !== updatedTask.status) {
+        dataToUpdate.status = updatedTask.status;
       }
-    }
-  };
+      if (
+        groupBy === "Assignee" &&
+        originalTask.assigneeId !== updatedTask.assigneeId
+      ) {
+        dataToUpdate.assigneeId =
+          updatedTask.assigneeId === undefined ? null : updatedTask.assigneeId;
+      } else if (
+        (groupBy === "Epic" || groupBy === "Subtask") &&
+        originalTask.parentId !== updatedTask.parentId
+      ) {
+        dataToUpdate.parentId =
+          updatedTask.parentId === undefined ? null : updatedTask.parentId;
+      }
 
+      const laneTasks = droppedTasks.filter((task) =>
+        isTaskInSameLane(task, updatedTask, droppedTasks, groupBy),
+      );
+      const movedIndex = laneTasks.findIndex(
+        (task) => task.id === updatedTask.id,
+      );
+      const previousTaskId = laneTasks[movedIndex - 1]?.id;
+      const nextTaskId = laneTasks[movedIndex + 1]?.id;
+      const nextOrder = calculateTaskOrder(
+        laneTasks[movedIndex - 1]?.order,
+        laneTasks[movedIndex + 1]?.order,
+      );
+
+      const originalLaneTasks = sourceTasks.filter((task) =>
+        isTaskInSameLane(task, originalTask, sourceTasks, groupBy),
+      );
+      const originalIndex = originalLaneTasks.findIndex(
+        (task) => task.id === originalTask.id,
+      );
+      const originalPreviousTaskId = originalLaneTasks[originalIndex - 1]?.id;
+      const originalNextTaskId = originalLaneTasks[originalIndex + 1]?.id;
+      const didPositionChange =
+        previousTaskId !== originalPreviousTaskId ||
+        nextTaskId !== originalNextTaskId;
+
+      if (nextOrder !== originalTask.order || didPositionChange) {
+        dataToUpdate.order = nextOrder;
+      }
+
+      if (Object.keys(dataToUpdate).length === 0 && !didPositionChange) return;
+
+      setLocalTasks(
+        droppedTasks.map((task) =>
+          task.id === updatedTask.id ? { ...task, order: nextOrder } : task,
+        ),
+      );
+
+      const shouldMoveTask =
+        didPositionChange ||
+        dataToUpdate.status !== undefined ||
+        dataToUpdate.parentId !== undefined ||
+        dataToUpdate.order !== undefined;
+
+      setIsDropPersisting(true);
+
+      if (shouldMoveTask) {
+        moveTask.mutate(
+          {
+            taskId: updatedTask.id,
+            data: {
+              afterTaskId: previousTaskId,
+              beforeTaskId: nextTaskId,
+              targetColumnId: updatedTask.status,
+              targetParentId: updatedTask.parentId ?? null,
+            },
+          },
+          {
+            onError: () => {
+              setLocalTasks(previousLocalTasksRef.current);
+              toast.error("Failed to save task position");
+            },
+            onSettled: () => {
+              setIsDropPersisting(false);
+            },
+          },
+        );
+      } else {
+        updateTask.mutate(
+          { taskId: updatedTask.id, data: dataToUpdate },
+          {
+            onError: () => {
+              setLocalTasks(previousLocalTasksRef.current);
+              toast.error("Failed to update task");
+            },
+            onSettled: () => {
+              setIsDropPersisting(false);
+            },
+          },
+        );
+      }
+    },
+    [
+      getDroppedTaskPreview,
+      groupBy,
+      localTasks,
+      moveTask,
+      serverTasks,
+      updateTask,
+    ],
+  );
+
+  useEffect(() => {
+    return monitorForElements({
+      canMonitor: ({ source }) => source.data.entityType === "task-card",
+      onDragStart: ({ source }) => {
+        const taskId = String(source.data.taskId ?? "");
+        if (!taskId) return;
+
+        isDraggingRef.current = true;
+        setActiveId(taskId);
+        previousLocalTasksRef.current = localTasks;
+        captureDraggingGroups(localTasks);
+      },
+      onDrop: ({ source, location }) => {
+        const taskId = String(source.data.taskId ?? "");
+        if (!taskId) return;
+
+        const target = location.current.dropTargets.find((dropTarget) =>
+          ["task-card", "task-column"].includes(
+            String(dropTarget.data.entityType ?? ""),
+          ),
+        );
+
+        persistDroppedTask(taskId, target?.data);
+      },
+    });
+  }, [captureDraggingGroups, localTasks, persistDroppedTask]);
   const handleCreate = (
     data: {
       title: string;
@@ -837,12 +941,6 @@ export function KanbanBoard({
     },
     [updateTask],
   );
-
-  const activeTask = useMemo(
-    () => localTasks.find((t) => t.id === activeId),
-    [activeId, localTasks],
-  );
-
   const baseFilteredTasks = useMemo(
     () =>
       filterTasks(localTasks, {
@@ -904,109 +1002,60 @@ export function KanbanBoard({
   return (
     <div className="flex flex-col h-full overflow-hidden pt-0">
       {headerSlot}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={pointerWithin}
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-        onDragCancel={onDragCancel}
+      <div
+        className="flex flex-col flex-1 min-h-0 overflow-x-auto overflow-y-auto px-6 pt-4 pb-6 md:px-8 md:pb-8 items-start relative custom-scrollbar"
+        ref={scrollContainerRef}
       >
-        <div
-          className="flex flex-col flex-1 min-h-0 overflow-x-auto overflow-y-auto px-6 pt-4 pb-6 md:px-8 md:pb-8 items-start relative custom-scrollbar"
-          ref={scrollContainerRef}
-        >
-          {groupBy !== "None" ? (
-            <div className="flex flex-col w-full">
-              {(() => {
-                const grouped = new Map<string, Task[]>();
-                const ungrouped: Task[] = [];
-                let hasUngroupedInServer = false;
+        {groupBy !== "None" ? (
+          <div className="flex flex-col w-full">
+            {(() => {
+              const grouped = new Map<string, Task[]>();
+              const ungrouped: Task[] = [];
+              let hasUngroupedInServer = false;
 
-                // Pre-populate groups based on state before drag started to prevent them from disappearing
-                if (activeId !== null) {
-                  draggingGroups.grouped.forEach((groupId) => {
-                    grouped.set(groupId, []);
-                  });
-                  hasUngroupedInServer = draggingGroups.hasUngrouped;
-                }
-
-                filteredTasks.forEach((t) => {
-                  if (groupBy === "Assignee") {
-                    if (t.assigneeId) {
-                      if (!grouped.has(t.assigneeId))
-                        grouped.set(t.assigneeId, []);
-                      grouped.get(t.assigneeId)!.push(t);
-                    } else {
-                      ungrouped.push(t);
-                    }
-                  } else if (groupBy === "Epic" || groupBy === "Subtask") {
-                    const laneId = getTaskLaneId(t, localTasks, groupBy);
-                    if (laneId) {
-                      if (!grouped.has(laneId)) grouped.set(laneId, []);
-                      grouped.get(laneId)!.push(t);
-                    } else ungrouped.push(t);
-                  }
+              // Pre-populate groups based on state before drag started to prevent them from disappearing
+              if (activeId !== null) {
+                draggingGroups.grouped.forEach((groupId) => {
+                  grouped.set(groupId, []);
                 });
+                hasUngroupedInServer = draggingGroups.hasUngrouped;
+              }
 
-                const ungroupedTitle =
-                  groupBy === "Assignee"
-                    ? "Unassigned"
-                    : groupBy === "Epic"
-                      ? "No Epic"
-                      : "Everything else";
+              filteredTasks.forEach((t) => {
+                if (groupBy === "Assignee") {
+                  if (t.assigneeId) {
+                    if (!grouped.has(t.assigneeId))
+                      grouped.set(t.assigneeId, []);
+                    grouped.get(t.assigneeId)!.push(t);
+                  } else {
+                    ungrouped.push(t);
+                  }
+                } else if (groupBy === "Epic" || groupBy === "Subtask") {
+                  const laneId = getTaskLaneId(t, localTasks, groupBy);
+                  if (laneId) {
+                    if (!grouped.has(laneId)) grouped.set(laneId, []);
+                    grouped.get(laneId)!.push(t);
+                  } else ungrouped.push(t);
+                }
+              });
 
-                return (
-                  <>
-                    {Array.from(grouped.entries()).map(([groupId, tasks]) => {
-                      if (groupBy === "Assignee") {
-                        const user = mockUsers.find((u) => u.id === groupId);
-                        return (
-                          <SwimlaneGroup
-                            key={groupId}
-                            title={user?.name || groupId}
-                            avatar={user?.avatarUrl}
-                            taskCount={tasks.length}
-                          >
-                            {columns.map((col, index) => {
-                              const columnTasks = tasks.filter(
-                                (t) => t.status === col.id,
-                              );
-                              return (
-                                <BoardColumn
-                                  {...getColumnManagementProps(
-                                    col,
-                                    `${col.id}___${groupId}`,
-                                  )}
-                                  key={`${col.id}___${groupId}`}
-                                  columnId={col.id}
-                                  droppableId={`${col.id}___${groupId}`}
-                                  groupId={groupId}
-                                  title={col.title}
-                                  tasks={columnTasks}
-                                  onTaskClick={setSelectedTask}
-                                  onTaskUpdate={handleCardUpdate}
-                                  onTaskDelete={handleDelete}
-                                  isFirstColumn={index === 0}
-                                  onCreateTask={(data) =>
-                                    handleCreate(data, { assigneeId: groupId })
-                                  }
-                                />
-                              );
-                            })}
-                          </SwimlaneGroup>
-                        );
-                      }
+              const ungroupedTitle =
+                groupBy === "Assignee"
+                  ? "Unassigned"
+                  : groupBy === "Epic"
+                    ? "No Epic"
+                    : "Everything else";
 
-                      const parentTask = serverTasks.find(
-                        (pt) => pt.id === groupId,
-                      );
-
+              return (
+                <>
+                  {Array.from(grouped.entries()).map(([groupId, tasks]) => {
+                    if (groupBy === "Assignee") {
+                      const user = mockUsers.find((u) => u.id === groupId);
                       return (
                         <SwimlaneGroup
                           key={groupId}
-                          title={parentTask?.title || groupId}
-                          parentTask={parentTask}
-                          onParentTaskClick={setSelectedTask}
+                          title={user?.name || groupId}
+                          avatar={user?.avatarUrl}
                           taskCount={tasks.length}
                         >
                           {columns.map((col, index) => {
@@ -1030,116 +1079,148 @@ export function KanbanBoard({
                                 onTaskDelete={handleDelete}
                                 isFirstColumn={index === 0}
                                 onCreateTask={(data) =>
-                                  handleCreate(data, { parentId: groupId })
+                                  handleCreate(data, { assigneeId: groupId })
                                 }
                               />
                             );
                           })}
                         </SwimlaneGroup>
                       );
-                    })}
-                    {(ungrouped.length > 0 ||
-                      hasUngroupedInServer ||
-                      grouped.size === 0) && (
+                    }
+
+                    const parentTask = serverTasks.find(
+                      (pt) => pt.id === groupId,
+                    );
+
+                    return (
                       <SwimlaneGroup
-                        title={ungroupedTitle}
-                        taskCount={ungrouped.length}
-                        isFallbackGroup={true}
+                        key={groupId}
+                        title={parentTask?.title || groupId}
+                        parentTask={parentTask}
+                        onParentTaskClick={setSelectedTask}
+                        taskCount={tasks.length}
                       >
                         {columns.map((col, index) => {
-                          const columnTasks = ungrouped.filter(
+                          const columnTasks = tasks.filter(
                             (t) => t.status === col.id,
                           );
                           return (
                             <BoardColumn
                               {...getColumnManagementProps(
                                 col,
-                                `${col.id}___ungrouped`,
+                                `${col.id}___${groupId}`,
                               )}
-                              key={`${col.id}___ungrouped`}
+                              key={`${col.id}___${groupId}`}
                               columnId={col.id}
-                              droppableId={`${col.id}___ungrouped`}
-                              groupId="ungrouped"
+                              droppableId={`${col.id}___${groupId}`}
+                              groupId={groupId}
                               title={col.title}
                               tasks={columnTasks}
                               onTaskClick={setSelectedTask}
                               onTaskUpdate={handleCardUpdate}
                               onTaskDelete={handleDelete}
                               isFirstColumn={index === 0}
-                              onCreateTask={handleCreate}
+                              onCreateTask={(data) =>
+                                handleCreate(data, { parentId: groupId })
+                              }
                             />
                           );
                         })}
                       </SwimlaneGroup>
-                    )}
-                  </>
-                );
-              })()}
+                    );
+                  })}
+                  {(ungrouped.length > 0 ||
+                    hasUngroupedInServer ||
+                    grouped.size === 0) && (
+                    <SwimlaneGroup
+                      title={ungroupedTitle}
+                      taskCount={ungrouped.length}
+                      isFallbackGroup={true}
+                    >
+                      {columns.map((col, index) => {
+                        const columnTasks = ungrouped.filter(
+                          (t) => t.status === col.id,
+                        );
+                        return (
+                          <BoardColumn
+                            {...getColumnManagementProps(
+                              col,
+                              `${col.id}___ungrouped`,
+                            )}
+                            key={`${col.id}___ungrouped`}
+                            columnId={col.id}
+                            droppableId={`${col.id}___ungrouped`}
+                            groupId="ungrouped"
+                            title={col.title}
+                            tasks={columnTasks}
+                            onTaskClick={setSelectedTask}
+                            onTaskUpdate={handleCardUpdate}
+                            onTaskDelete={handleDelete}
+                            isFirstColumn={index === 0}
+                            onCreateTask={handleCreate}
+                          />
+                        );
+                      })}
+                    </SwimlaneGroup>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        ) : (
+          <div className="flex h-fit max-h-full min-h-0">
+            {columns.map((col, index) => {
+              const columnTasks = filteredTasks.filter(
+                (t) => t.status === col.id,
+              );
+              return (
+                <BoardColumn
+                  {...getColumnManagementProps(col, col.id)}
+                  key={col.id}
+                  columnId={col.id}
+                  droppableId={col.id}
+                  title={col.title}
+                  tasks={columnTasks}
+                  onTaskClick={setSelectedTask}
+                  onTaskUpdate={handleCardUpdate}
+                  onTaskDelete={handleDelete}
+                  isFirstColumn={index === 0}
+                  onCreateTask={handleCreate}
+                />
+              );
+            })}
+            <div className="w-70 shrink-0 pr-6">
+              {isAddingColumn ? (
+                <input
+                  autoFocus
+                  value={newColumnTitle}
+                  onChange={(event) => setNewColumnTitle(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void handleAddColumn();
+                    if (event.key === "Escape") {
+                      setNewColumnTitle("");
+                      setIsAddingColumn(false);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (!newColumnTitle.trim()) setIsAddingColumn(false);
+                  }}
+                  placeholder="Column name"
+                  className="h-10 w-full rounded-lg border border-primary bg-muted/50 px-3 text-sm font-medium outline-none ring-2 ring-primary/20 placeholder:text-muted-foreground"
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsAddingColumn(true)}
+                  className="flex h-10 w-full items-center gap-2 rounded-lg border border-dashed px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <Plus className="h-4 w-4" /> Add column
+                </button>
+              )}
             </div>
-          ) : (
-            <div className="flex h-fit max-h-full min-h-0">
-              {columns.map((col, index) => {
-                const columnTasks = filteredTasks.filter(
-                  (t) => t.status === col.id,
-                );
-                return (
-                  <BoardColumn
-                    {...getColumnManagementProps(col, col.id)}
-                    key={col.id}
-                    columnId={col.id}
-                    droppableId={col.id}
-                    title={col.title}
-                    tasks={columnTasks}
-                    onTaskClick={setSelectedTask}
-                    onTaskUpdate={handleCardUpdate}
-                    onTaskDelete={handleDelete}
-                    isFirstColumn={index === 0}
-                    onCreateTask={handleCreate}
-                  />
-                );
-              })}
-              <div className="w-70 shrink-0 pr-6">
-                {isAddingColumn ? (
-                  <input
-                    autoFocus
-                    value={newColumnTitle}
-                    onChange={(event) => setNewColumnTitle(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void handleAddColumn();
-                      if (event.key === "Escape") {
-                        setNewColumnTitle("");
-                        setIsAddingColumn(false);
-                      }
-                    }}
-                    onBlur={() => {
-                      if (!newColumnTitle.trim()) setIsAddingColumn(false);
-                    }}
-                    placeholder="Column name"
-                    className="h-10 w-full rounded-lg border border-primary bg-muted/50 px-3 text-sm font-medium outline-none ring-2 ring-primary/20 placeholder:text-muted-foreground"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setIsAddingColumn(true)}
-                    className="flex h-10 w-full items-center gap-2 rounded-lg border border-dashed px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    <Plus className="h-4 w-4" /> Add column
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {createPortal(
-          <DragOverlay dropAnimation={null}>
-            {activeTask ? (
-              <TaskCard task={activeTask} onClick={() => {}} isOverlay />
-            ) : null}
-          </DragOverlay>,
-          document.body,
+          </div>
         )}
-      </DndContext>
+      </div>
 
       <TaskDetailModal
         task={selectedTask}
