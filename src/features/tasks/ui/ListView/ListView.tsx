@@ -77,6 +77,7 @@ import {
   useUpdateTask,
   useCreateTask,
 } from "../../model/useTasks";
+import { useProjectColumns } from "../../model/useWorkflow";
 import { mockUsers } from "@/features/users/model/mockUsers";
 import { PriorityIcon } from "../PriorityIcon";
 import { TaskDetailModal } from "../TaskDetailModal/TaskDetailModal";
@@ -921,6 +922,7 @@ export function ListView({
   headerSlot,
 }: ListViewProps) {
   const { data: tasks = [] } = useTasksByProject(projectId);
+  const { data: columns = [] } = useProjectColumns(projectId);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   const [editTitleValue, setEditTitleValue] = useState("");
@@ -1244,6 +1246,7 @@ export function ListView({
                   <TaskDetailPanel
                     task={selectedTask}
                     onClose={() => setSelectedTaskId(null)}
+                    columns={columns}
                   />
                 </div>
               ) : (
@@ -1548,6 +1551,7 @@ export function ListView({
           task={selectedTask}
           isOpen={true}
           onClose={() => setSelectedTaskId(null)}
+          columns={columns}
         />
       )}
 

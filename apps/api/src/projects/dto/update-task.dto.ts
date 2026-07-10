@@ -56,6 +56,13 @@ export class UpdateTaskDto {
   @IsUUID()
   assigneeId?: string | null;
 
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  @ValidateIf(
+    (_object, value: unknown) => value !== null && value !== undefined,
+  )
+  @IsUUID()
+  reporterId?: string | null;
+
   @ApiPropertyOptional({ type: [String] })
   @IsArray()
   @ArrayMaxSize(20)

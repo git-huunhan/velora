@@ -1,6 +1,6 @@
-import type { TaskStatus } from "../../model/types";
+import type { KanbanColumn, TaskStatus } from "../../model/types";
 
-interface TaskStatusPresentation {
+export interface TaskStatusPresentation {
   label: string;
   triggerClassName: string;
   dotClassName: string;
@@ -40,7 +40,68 @@ export const TASK_STATUS_ENTRIES = Object.entries(TASK_STATUS_PRESENTATION) as [
   TaskStatus,
   TaskStatusPresentation,
 ][];
+export const DEFAULT_TASK_STATUS_PRESENTATION: TaskStatusPresentation = {
+  label: "Status",
+  triggerClassName:
+    "bg-muted border-border text-muted-foreground hover:bg-muted/80",
+  dotClassName: "bg-muted-foreground",
+};
 
+export function getTaskStatusPresentation(status: TaskStatus) {
+  return TASK_STATUS_PRESENTATION[status] ?? DEFAULT_TASK_STATUS_PRESENTATION;
+}
 export function getTaskStatusClassName(status: TaskStatus) {
-  return TASK_STATUS_PRESENTATION[status].triggerClassName;
+  return getTaskStatusPresentation(status).triggerClassName;
+}
+function normalizeStatusLabel(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+export function findTaskStatusColumn(
+  status: string,
+  columns: KanbanColumn[] = [],
+) {
+  const exactColumn = columns.find((column) => column.id === status);
+  if (exactColumn) return exactColumn;
+
+  const fallbackPresentation = TASK_STATUS_PRESENTATION[status as TaskStatus];
+  if (!fallbackPresentation) return undefined;
+
+  const normalizedLabel = normalizeStatusLabel(fallbackPresentation.label);
+  return columns.find(
+    (column) => normalizeStatusLabel(column.title) === normalizedLabel,
+  );
+}
+
+export function getTaskStatusLabel(
+  status: string,
+  columns: KanbanColumn[] = [],
+) {
+  const column = findTaskStatusColumn(status, columns);
+  if (column) return column.title;
+
+  const presentation = TASK_STATUS_PRESENTATION[status as TaskStatus];
+  return presentation?.label ?? DEFAULT_TASK_STATUS_PRESENTATION.label;
+}
+
+export function getTaskStatusPresentationWithColumns(
+  status: string,
+  columns: KanbanColumn[] = [],
+) {
+  const column = findTaskStatusColumn(status, columns);
+  const columnTitleStatus = column
+    ? (Object.entries(TASK_STATUS_PRESENTATION).find(
+        ([, presentation]) =>
+          normalizeStatusLabel(presentation.label) ===
+          normalizeStatusLabel(column.title),
+      )?.[0] as TaskStatus | undefined)
+    : undefined;
+  const presentation = getTaskStatusPresentation(
+    columnTitleStatus ?? (status as TaskStatus),
+  );
+
+  return {
+    ...presentation,
+    label: column?.title ?? presentation.label,
+  };
 }

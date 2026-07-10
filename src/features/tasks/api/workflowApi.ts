@@ -1,34 +1,69 @@
-import { KANBAN_COLUMNS, type KanbanColumn } from "../model/types";
+import { apiRequest } from "@/shared/api/client";
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const workflows = new Map<string, KanbanColumn[]>();
+import type { KanbanColumn, TaskStatus } from "../model/types";
 
-function getWorkflow(projectId: string) {
-  if (!workflows.has(projectId)) {
-    workflows.set(
-      projectId,
-      KANBAN_COLUMNS.map((column) => ({ ...column })),
-    );
-  }
-  return workflows.get(projectId)!;
+interface ApiKanbanColumn {
+  createdAt: string;
+  id: string;
+  isDone: boolean;
+  name: string;
+  projectId: string;
+  rank: string;
+  updatedAt: string;
+}
+
+interface ApiKanbanColumnList {
+  data: ApiKanbanColumn[];
+}
+
+const columnCache = new Map<string, KanbanColumn[]>();
+
+function rankToOrder(rank: string, fallback: number) {
+  const numericRank = Number(rank.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(numericRank) && numericRank > 0
+    ? numericRank
+    : fallback;
+}
+
+function toColumn(apiColumn: ApiKanbanColumn, fallbackOrder: number) {
+  return {
+    id: apiColumn.id as TaskStatus,
+    isDone: apiColumn.isDone,
+    order: rankToOrder(apiColumn.rank, fallbackOrder),
+    title: apiColumn.name,
+    updatedAt: apiColumn.updatedAt,
+  } satisfies KanbanColumn;
+}
+
+async function refreshProjectColumns(projectId: string) {
+  const response = await apiRequest<ApiKanbanColumnList>(
+    `/projects/${projectId}/columns`,
+  );
+  const columns = response.data
+    .map((column, index) => toColumn(column, index))
+    .sort((a, b) => a.order - b.order);
+  columnCache.set(projectId, columns);
+  return columns;
+}
+
+function getCachedColumn(projectId: string, columnId: string) {
+  return columnCache.get(projectId)?.find((column) => column.id === columnId);
 }
 
 export async function getProjectColumns(projectId: string) {
-  await delay(200);
-  return getWorkflow(projectId).sort((a, b) => a.order - b.order);
+  return refreshProjectColumns(projectId);
 }
 
 export async function createProjectColumn(projectId: string, title: string) {
-  await delay(250);
-  const columns = getWorkflow(projectId);
-  const column: KanbanColumn = {
-    id: `custom-${Date.now()}` as const,
-    title: title.trim(),
-    order: columns.length,
-    isDone: false,
-  };
-  workflows.set(projectId, [...columns, column]);
-  return column;
+  const created = await apiRequest<ApiKanbanColumn>(
+    `/projects/${projectId}/columns`,
+    {
+      body: JSON.stringify({ name: title.trim() }),
+      method: "POST",
+    },
+  );
+  await refreshProjectColumns(projectId);
+  return toColumn(created, Number.MAX_SAFE_INTEGER);
 }
 
 export async function updateProjectColumn(
@@ -36,42 +71,76 @@ export async function updateProjectColumn(
   columnId: string,
   data: Partial<Pick<KanbanColumn, "title" | "isDone">>,
 ) {
-  await delay(250);
-  const columns = getWorkflow(projectId);
-  const column = columns.find((item) => item.id === columnId);
-  if (!column) throw new Error("Column not found");
-  if (data.isDone) {
-    columns.forEach((item) => (item.isDone = item.id === columnId));
-  }
-  Object.assign(column, data);
-  return { ...column };
+  const updated = await apiRequest<ApiKanbanColumn>(
+    `/projects/${projectId}/columns/${columnId}`,
+    {
+      body: JSON.stringify({
+        isDone: data.isDone,
+        name: data.title,
+      }),
+      method: "PATCH",
+    },
+  );
+  await refreshProjectColumns(projectId);
+  return toColumn(updated, getCachedColumn(projectId, columnId)?.order ?? 0);
 }
 
 export async function reorderProjectColumns(
   projectId: string,
   columnIds: string[],
 ) {
-  await delay(250);
-  const columns = getWorkflow(projectId);
-  const reordered = columnIds.map((id, order) => ({
-    ...columns.find((column) => column.id === id)!,
-    order,
-  }));
-  workflows.set(projectId, reordered);
-  return reordered;
+  const current =
+    columnCache.get(projectId) ?? (await refreshProjectColumns(projectId));
+  const previousIndexById = new Map(
+    current.map((column, index) => [String(column.id), index]),
+  );
+  const movedColumnId = columnIds.reduce<string | null>(
+    (candidate, id, index) => {
+      const previousIndex = previousIndexById.get(id);
+      if (previousIndex === undefined || previousIndex === index)
+        return candidate;
+      if (!candidate) return id;
+
+      const candidateDistance = Math.abs(
+        (previousIndexById.get(candidate) ?? index) -
+          columnIds.indexOf(candidate),
+      );
+      const distance = Math.abs(previousIndex - index);
+      return distance > candidateDistance ? id : candidate;
+    },
+    null,
+  );
+
+  if (!movedColumnId) return current;
+
+  const movedIndex = columnIds.indexOf(movedColumnId);
+  const movedColumn = current.find(
+    (column) => String(column.id) === movedColumnId,
+  );
+  if (!movedColumn?.updatedAt) return current;
+
+  await apiRequest<ApiKanbanColumn>(
+    `/projects/${projectId}/columns/${movedColumnId}/move`,
+    {
+      body: JSON.stringify({
+        afterColumnId: movedIndex > 0 ? columnIds[movedIndex - 1] : undefined,
+        beforeColumnId:
+          movedIndex < columnIds.length - 1
+            ? columnIds[movedIndex + 1]
+            : undefined,
+        expectedUpdatedAt: movedColumn.updatedAt,
+      }),
+      method: "POST",
+    },
+  );
+
+  return refreshProjectColumns(projectId);
 }
 
 export async function deleteProjectColumn(projectId: string, columnId: string) {
-  await delay(250);
-  const columns = getWorkflow(projectId);
-  const column = columns.find((item) => item.id === columnId);
-  if (!column) throw new Error("Column not found");
-  if (column.isDone) throw new Error("Choose another done column first");
-  workflows.set(
-    projectId,
-    columns
-      .filter((item) => item.id !== columnId)
-      .map((item, order) => ({ ...item, order })),
-  );
+  await apiRequest<void>(`/projects/${projectId}/columns/${columnId}`, {
+    method: "DELETE",
+  });
+  await refreshProjectColumns(projectId);
   return columnId;
 }

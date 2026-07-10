@@ -502,9 +502,17 @@ export class ProjectsService {
       for (const [index, column] of reordered.entries()) {
         await transaction.kanbanColumn.update({
           where: { id: column.id },
+          data: { rank: `tmp-${index}-${column.id}` },
+        });
+      }
+
+      for (const [index, column] of reordered.entries()) {
+        await transaction.kanbanColumn.update({
+          where: { id: column.id },
           data: { rank: columnRankAt(index) },
         });
       }
+
       return transaction.kanbanColumn.findUniqueOrThrow({
         where: { id: columnId },
       });
@@ -574,7 +582,6 @@ export class ProjectsService {
     if (input.assigneeId) {
       await this.assertProjectMemberExists(projectId, input.assigneeId);
     }
-
     const parentId = input.parentId ?? null;
     const type = input.type;
     const hierarchyTasks = await this.getHierarchyTasks(projectId);
@@ -641,6 +648,9 @@ export class ProjectsService {
     if (input.assigneeId) {
       await this.assertProjectMemberExists(projectId, input.assigneeId);
     }
+    if (input.reporterId) {
+      await this.assertProjectMemberExists(projectId, input.reporterId);
+    }
 
     const nextType = input.type ?? taskTypeToApi[existing.type];
     const nextParentId =
@@ -663,6 +673,9 @@ export class ProjectsService {
     const data: Prisma.TaskUpdateInput = {};
     if (input.columnId !== undefined) {
       data.column = { connect: { id: input.columnId } };
+      if (input.columnId !== existing.columnId) {
+        data.rank = await this.nextTaskRank(input.columnId);
+      }
     }
     if (input.parentId !== undefined) {
       data.parent = input.parentId
@@ -672,6 +685,11 @@ export class ProjectsService {
     if (input.assigneeId !== undefined) {
       data.assignee = input.assigneeId
         ? { connect: { id: input.assigneeId } }
+        : { disconnect: true };
+    }
+    if (input.reporterId !== undefined) {
+      data.reporter = input.reporterId
+        ? { connect: { id: input.reporterId } }
         : { disconnect: true };
     }
     if (input.title !== undefined) data.title = input.title.trim();
@@ -861,7 +879,7 @@ export class ProjectsService {
         field: 'commented',
         from: null,
         taskId,
-        to: createdComment.id,
+        to: createdComment.body,
       });
       return createdComment;
     });
@@ -974,6 +992,7 @@ export class ProjectsService {
   private collectTaskUpdateActivities(
     previous: {
       assigneeId: string | null;
+      reporterId: string | null;
       columnId: string;
       description: string;
       dueDate: Date | null;
@@ -986,6 +1005,7 @@ export class ProjectsService {
     },
     next: {
       assigneeId: string | null;
+      reporterId: string | null;
       columnId: string;
       description: string;
       dueDate: Date | null;
@@ -1016,6 +1036,11 @@ export class ProjectsService {
         field: 'assigneeId',
         from: previous.assigneeId,
         to: next.assigneeId,
+      },
+      {
+        field: 'reporterId',
+        from: previous.reporterId,
+        to: next.reporterId,
       },
       {
         field: 'title',

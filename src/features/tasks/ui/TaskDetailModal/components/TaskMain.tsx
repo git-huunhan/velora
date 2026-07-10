@@ -35,7 +35,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-import type { Task, TaskFieldUpdater, TaskStatus } from "../../../model/types";
+import type {
+  KanbanColumn,
+  Task,
+  TaskFieldUpdater,
+  TaskStatus,
+} from "../../../model/types";
 import { TaskActivity } from "./TaskActivity";
 import { TaskSidebar } from "./TaskSidebar";
 import { TaskTitleEditor } from "./TaskTitleEditor";
@@ -56,6 +61,7 @@ interface TaskMainProps {
   handleUpdate: TaskFieldUpdater;
   onOpenTask?: (task: Task) => void;
   className?: string;
+  columns?: KanbanColumn[];
 }
 
 export function TaskMain({
@@ -63,6 +69,7 @@ export function TaskMain({
   handleUpdate,
   onOpenTask,
   className,
+  columns,
 }: TaskMainProps) {
   const { data: tasks = [] } = useTasksByProject(task.projectId);
   const { mutate: updateTask } = useUpdateTask();
@@ -91,9 +98,6 @@ export function TaskMain({
   const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
   const [editingSubtaskTitle, setEditingSubtaskTitle] = useState("");
   const [openAssigneePopover, setOpenAssigneePopover] = useState<string | null>(
-    null,
-  );
-  const [openStatusPopover, setOpenStatusPopover] = useState<string | null>(
     null,
   );
 
@@ -256,6 +260,7 @@ export function TaskMain({
             <TaskStatusSelect
               value={task.status}
               onChange={(status: TaskStatus) => handleUpdate("status", status)}
+              columns={columns}
             />
           </div>
 
@@ -594,7 +599,7 @@ export function TaskMain({
                   </div>
 
                   <div className="border border-border/50 rounded-lg overflow-hidden text-[13px] bg-card">
-                    <div className="grid grid-cols-[1fr_120px_140px_100px] bg-muted/10 font-medium text-muted-foreground p-2 border-b border-border/50 text-xs">
+                    <div className="grid grid-cols-[1fr_120px_140px_128px] bg-muted/10 font-medium text-muted-foreground p-2 border-b border-border/50 text-xs">
                       <div className="pl-2">Work</div>
                       <div>Priority</div>
                       <div>Assignee</div>
@@ -604,7 +609,7 @@ export function TaskMain({
                     {subtasks.map((st) => (
                       <div
                         key={st.id}
-                        className="grid grid-cols-[1fr_120px_140px_100px] p-2 items-center hover:bg-muted/20 transition-colors border-b last:border-b-0 border-border/50 group"
+                        className="grid grid-cols-[1fr_120px_140px_128px] p-2 items-center hover:bg-muted/20 transition-colors border-b last:border-b-0 border-border/50 group"
                       >
                         <div className="flex items-center gap-2 pl-2 overflow-hidden pr-2">
                           {isEpic ? (
@@ -773,86 +778,17 @@ export function TaskMain({
                           </Popover>
                         </div>
                         <div>
-                          <Popover
-                            open={openStatusPopover === st.id}
-                            onOpenChange={(o) =>
-                              setOpenStatusPopover(o ? st.id : null)
-                            }
-                          >
-                            <PopoverTrigger asChild>
-                              <button
-                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded w-fit uppercase border flex items-center gap-1 transition-colors ${st.status === "done" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25" : st.status === "in-progress" ? "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30 hover:bg-blue-500/25" : st.status === "review" ? "bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 border-yellow-500/30 hover:bg-yellow-500/25" : "bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30 hover:bg-violet-500/25"}`}
-                              >
-                                {st.status.replace("-", " ")}{" "}
-                                <ChevronDown className="w-3 h-3 opacity-70" />
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent
-                              className="w-40 p-1 flex flex-col gap-0.5"
-                              align="start"
-                            >
-                              <button
-                                className="px-2 py-1.5 rounded-sm hover:bg-muted text-[10px] font-bold text-left transition-colors flex items-center"
-                                onClick={() => {
-                                  updateTask({
-                                    taskId: st.id,
-                                    data: { status: "todo" },
-                                  });
-                                  setOpenStatusPopover(null);
-                                }}
-                              >
-                                <span className="bg-violet-500/15 text-violet-700 dark:text-violet-300 px-1.5 py-0.5 rounded uppercase border border-violet-500/30">
-                                  TO DO
-                                </span>
-                              </button>
-                              <button
-                                className="px-2 py-1.5 rounded-sm hover:bg-muted text-[10px] font-bold text-left transition-colors flex items-center"
-                                onClick={() => {
-                                  updateTask({
-                                    taskId: st.id,
-                                    data: { status: "in-progress" },
-                                  });
-                                  setOpenStatusPopover(null);
-                                }}
-                              >
-                                <span className="bg-blue-500/15 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded uppercase border border-blue-500/30">
-                                  IN PROGRESS
-                                </span>
-                              </button>
-                              <button
-                                className="px-2 py-1.5 rounded-sm hover:bg-muted text-[10px] font-bold text-left transition-colors flex items-center"
-                                onClick={() => {
-                                  updateTask({
-                                    taskId: st.id,
-                                    data: { status: "review" },
-                                  });
-                                  setOpenStatusPopover(null);
-                                }}
-                              >
-                                <span className="bg-yellow-500/15 text-yellow-700 dark:text-yellow-300 px-1.5 py-0.5 rounded uppercase border border-yellow-500/30">
-                                  REVIEW
-                                </span>
-                              </button>
-                              <button
-                                className="px-2 py-1.5 rounded-sm hover:bg-muted text-[10px] font-bold text-left transition-colors flex items-center"
-                                onClick={() => {
-                                  updateTask({
-                                    taskId: st.id,
-                                    data: { status: "done" },
-                                  });
-                                  setOpenStatusPopover(null);
-                                }}
-                              >
-                                <span className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded uppercase border border-emerald-500/30">
-                                  DONE
-                                </span>
-                              </button>
-                              <div className="h-px bg-border/50 my-1"></div>
-                              <button className="px-2 py-1.5 rounded-sm hover:bg-muted text-[12px] font-medium text-left transition-colors">
-                                View workflow
-                              </button>
-                            </PopoverContent>
-                          </Popover>
+                          <TaskStatusSelect
+                            value={st.status}
+                            onChange={(status: TaskStatus) => {
+                              updateTask({
+                                taskId: st.id,
+                                data: { status },
+                              });
+                            }}
+                            columns={columns}
+                            className="h-7 w-[118px] px-2 text-[10px] uppercase justify-between"
+                          />
                         </div>
                       </div>
                     ))}
@@ -1020,7 +956,7 @@ export function TaskMain({
           </div>
 
           {/* Activity Section */}
-          <TaskActivity taskId={task.id} />
+          <TaskActivity taskId={task.id} columns={columns} tasks={tasks} />
         </div>
       </div>
     </div>

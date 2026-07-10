@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import { useAuth } from "@/features/auth/model/useAuth";
+import { getUserAvatarUrl } from "@/features/auth/model/userAvatar";
+
 import type { ActivityEntry, Comment } from "../model/types";
 import {
   createComment,
@@ -10,18 +13,12 @@ import {
   updateComment,
   logActivityApi,
 } from "../api/commentsApi";
-import { mockUsers } from "../../users/model/mockUsers";
 
-const CURRENT_USER = mockUsers[0]; // In real app: from auth context
-
-// ─── Query keys ────────────────────────────────────────────────────────────────
 export const commentKeys = {
   all: ["comments"] as const,
   byTask: (taskId: string) => ["comments", taskId] as const,
   activity: (taskId: string) => ["activity", taskId] as const,
 };
-
-// ─── Comments ──────────────────────────────────────────────────────────────────
 
 export function useComments(taskId: string) {
   const { data, isLoading } = useQuery<Comment[]>({
@@ -36,11 +33,11 @@ export function useComments(taskId: string) {
 
 export function useCreateComment(taskId: string) {
   const qc = useQueryClient();
+  const { user } = useAuth();
 
   return useMutation({
     mutationFn: (body: string) => createComment(taskId, body),
 
-    // Optimistic insert at the top
     onMutate: async (body) => {
       await qc.cancelQueries({ queryKey: commentKeys.byTask(taskId) });
       const previous = qc.getQueryData<Comment[]>(commentKeys.byTask(taskId));
@@ -48,11 +45,11 @@ export function useCreateComment(taskId: string) {
       const optimistic: Comment = {
         id: `optimistic-${Date.now()}`,
         taskId,
-        authorId: CURRENT_USER.id,
+        authorId: user?.id ?? "",
         author: {
-          id: CURRENT_USER.id,
-          name: CURRENT_USER.name,
-          avatarUrl: CURRENT_USER.avatarUrl ?? "",
+          id: user?.id ?? "",
+          name: user?.name ?? "Current user",
+          avatarUrl: getUserAvatarUrl(user),
         },
         body,
         createdAt: new Date().toISOString(),
@@ -149,8 +146,6 @@ export function useDeleteComment(taskId: string) {
     },
   });
 }
-
-// ─── Activity ──────────────────────────────────────────────────────────────────
 
 export function useActivity(taskId: string) {
   const { data, isLoading } = useQuery<ActivityEntry[]>({

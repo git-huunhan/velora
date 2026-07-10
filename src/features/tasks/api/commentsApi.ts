@@ -1,160 +1,130 @@
-import { mockUsers } from "../../users/model/mockUsers";
+import { getUserAvatarUrl } from "@/features/auth/model/userAvatar";
+import { apiRequest } from "@/shared/api/client";
+
 import type { ActivityEntry, Comment } from "../model/types";
+import { getCachedTaskProjectId } from "./tasksApi";
 
-const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
+interface ApiUserSummary {
+  avatarUrl: string | null;
+  id: string;
+  name: string;
+}
 
-const ME = mockUsers[0];
+interface ApiComment {
+  author: ApiUserSummary;
+  body: string;
+  createdAt: string;
+  id: string;
+  taskId: string;
+  updatedAt: string;
+}
 
-// ─── Seed data ────────────────────────────────────────────────────────────────
+interface ApiActivity {
+  actor: ApiUserSummary;
+  createdAt: string;
+  field: string;
+  from: string | null;
+  id: string;
+  taskId: string;
+  to: string | null;
+}
 
-let commentsDb: Comment[] = [
-  {
-    id: "comment-1",
-    taskId: "task-1",
-    authorId: "user-2",
-    author: {
-      id: mockUsers[1].id,
-      name: mockUsers[1].name,
-      avatarUrl: mockUsers[1].avatarUrl || "",
-    },
-    body: "Please update the color palette to match the new emerald theme.",
-    createdAt: new Date(Date.now() - 7200000).toISOString(),
-  },
-  {
-    id: "comment-2",
-    taskId: "task-1",
-    authorId: "user-1",
-    author: {
-      id: ME.id,
-      name: ME.name,
-      avatarUrl: ME.avatarUrl || "",
-    },
-    body: "On it — will push the update by EOD.",
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-  },
-];
+interface ApiCommentList {
+  data: ApiComment[];
+}
 
-const activityDb: ActivityEntry[] = [
-  {
-    id: "activity-1",
-    taskId: "task-1",
-    actorId: "user-2",
-    actor: {
-      id: mockUsers[1].id,
-      name: mockUsers[1].name,
-      avatarUrl: mockUsers[1].avatarUrl || "",
-    },
-    field: "status",
-    from: "To Do",
-    to: "In Progress",
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: "activity-2",
-    taskId: "task-1",
-    actorId: "user-1",
-    actor: {
-      id: ME.id,
-      name: ME.name,
-      avatarUrl: ME.avatarUrl || "",
-    },
-    field: "priority",
-    from: "Low",
-    to: "High",
-    createdAt: new Date(Date.now() - 43200000).toISOString(),
-  },
-  {
-    id: "activity-3",
-    taskId: "task-1",
-    actorId: "user-2",
-    actor: {
-      id: mockUsers[1].id,
-      name: mockUsers[1].name,
-      avatarUrl: mockUsers[1].avatarUrl || "",
-    },
-    field: "assignee",
-    from: "Unassigned",
-    to: ME.name,
-    createdAt: new Date(Date.now() - 10800000).toISOString(),
-  },
-];
+interface ApiActivityList {
+  data: ApiActivity[];
+}
 
-// ─── Comment APIs ──────────────────────────────────────────────────────────────
+function getProjectIdOrThrow(taskId: string) {
+  const projectId = getCachedTaskProjectId(taskId);
+  if (!projectId)
+    throw new Error("Task must be loaded before comments can be loaded");
+  return projectId;
+}
+
+function toUser(user: ApiUserSummary) {
+  return {
+    avatarUrl: getUserAvatarUrl(user),
+    id: user.id,
+    name: user.name,
+  };
+}
+
+function toComment(comment: ApiComment): Comment {
+  const author = toUser(comment.author);
+  return {
+    author,
+    authorId: author.id,
+    body: comment.body,
+    createdAt: comment.createdAt,
+    id: comment.id,
+    isEdited: comment.updatedAt !== comment.createdAt,
+    taskId: comment.taskId,
+    updatedAt: comment.updatedAt,
+  };
+}
+
+function toActivity(activity: ApiActivity): ActivityEntry {
+  const actor = toUser(activity.actor);
+  return {
+    actor,
+    actorId: actor.id,
+    createdAt: activity.createdAt,
+    field: activity.field,
+    from: activity.from ?? "",
+    id: activity.id,
+    taskId: activity.taskId,
+    to: activity.to ?? "",
+  };
+}
 
 export async function getCommentsByTaskId(taskId: string): Promise<Comment[]> {
-  await delay(400);
-  return commentsDb
-    .filter((c) => c.taskId === taskId)
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
+  const projectId = getProjectIdOrThrow(taskId);
+  const response = await apiRequest<ApiCommentList>(
+    `/projects/${projectId}/tasks/${taskId}/comments`,
+  );
+  return response.data.map(toComment);
 }
 
 export async function createComment(
   taskId: string,
   body: string,
 ): Promise<Comment> {
-  await delay(300);
-  const newComment: Comment = {
-    id: `comment-${Date.now()}`,
-    taskId,
-    authorId: ME.id,
-    author: { id: ME.id, name: ME.name, avatarUrl: ME.avatarUrl || "" },
-    body,
-    createdAt: new Date().toISOString(),
-  };
-  commentsDb = [newComment, ...commentsDb];
-
-  // Add activity entry for the comment
-  activityDb.unshift({
-    id: `activity-${Date.now()}`,
-    taskId,
-    actorId: ME.id,
-    actor: { id: ME.id, name: ME.name, avatarUrl: ME.avatarUrl || "" },
-    field: "comment",
-    from: "",
-    to: body,
-    createdAt: new Date().toISOString(),
-  });
-
-  return newComment;
+  const projectId = getProjectIdOrThrow(taskId);
+  const created = await apiRequest<ApiComment>(
+    `/projects/${projectId}/tasks/${taskId}/comments`,
+    {
+      body: JSON.stringify({ body }),
+      method: "POST",
+    },
+  );
+  return toComment(created);
 }
 
 export async function updateComment(
   commentId: string,
   body: string,
 ): Promise<Comment> {
-  await delay(300);
-  const comment = commentsDb.find((c) => c.id === commentId);
-  if (!comment) throw new Error("Comment not found");
-  if (comment.authorId !== ME.id) throw new Error("Unauthorized");
-  comment.body = body;
-  comment.updatedAt = new Date().toISOString();
-  comment.isEdited = true;
-  return { ...comment };
+  void commentId;
+  void body;
+  throw new Error("Comment editing is not available in the backend yet");
 }
 
 export async function deleteComment(commentId: string): Promise<void> {
-  await delay(300);
-  const comment = commentsDb.find((c) => c.id === commentId);
-  if (!comment) throw new Error("Comment not found");
-  if (comment.authorId !== ME.id) throw new Error("Unauthorized");
-  commentsDb = commentsDb.filter((c) => c.id !== commentId);
+  void commentId;
+  throw new Error("Comment deletion is not available in the backend yet");
 }
-
-// ─── Activity API ──────────────────────────────────────────────────────────────
 
 export async function getActivityByTaskId(
   taskId: string,
 ): Promise<ActivityEntry[]> {
-  await delay(400);
-  return activityDb
-    .filter((a) => a.taskId === taskId)
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
+  const projectId = getProjectIdOrThrow(taskId);
+  const response = await apiRequest<ApiActivityList>(
+    `/projects/${projectId}/tasks/${taskId}/activities`,
+  );
+  return response.data.map(toActivity);
 }
 
 export async function logActivityApi(
@@ -165,29 +135,15 @@ export async function logActivityApi(
   fromAvatar?: string,
   toAvatar?: string,
 ) {
-  await delay(200);
-  logActivity(taskId, field, from, to, fromAvatar, toAvatar);
+  void taskId;
+  void field;
+  void from;
+  void to;
+  void fromAvatar;
+  void toAvatar;
+  throw new Error("Manual activity logging is not available in the backend");
 }
 
-/** Call this from task update flows to log field changes automatically */
-export function logActivity(
-  taskId: string,
-  field: string,
-  from: string,
-  to: string,
-  fromAvatar?: string,
-  toAvatar?: string,
-) {
-  activityDb.unshift({
-    id: `activity-${Date.now()}`,
-    taskId,
-    actorId: ME.id,
-    actor: { id: ME.id, name: ME.name, avatarUrl: ME.avatarUrl || "" },
-    field,
-    from,
-    to,
-    fromAvatar,
-    toAvatar,
-    createdAt: new Date().toISOString(),
-  });
+export function logActivity() {
+  // Activity entries are generated by the backend when tasks/comments mutate.
 }

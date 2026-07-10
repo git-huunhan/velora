@@ -12,7 +12,7 @@ export interface Task {
   projectId: string;
   title: string;
   description?: string;
-  type?: "task" | "epic" | "bug";
+  type?: "task" | "epic" | "bug" | "subtask";
   status: TaskStatus;
   priority: TaskPriority;
   order: number;
@@ -33,6 +33,7 @@ export interface Task {
   dueDate?: string;
   parentId?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export type TaskUpdateData = Partial<
@@ -64,6 +65,7 @@ export interface KanbanColumn {
   title: string;
   order: number;
   isDone: boolean;
+  updatedAt?: string;
 }
 
 export const KANBAN_COLUMNS: KanbanColumn[] = [
@@ -103,4 +105,5 @@ export interface ActivityEntry {
   fromAvatar?: string;
   toAvatar?: string;
   createdAt: string;
+  updatedAt?: string;
 }

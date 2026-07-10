@@ -9,13 +9,19 @@ import {
   Trash2,
   ArrowDownWideNarrow,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
-import type { ActivityEntry, Comment } from "../../../model/types";
+import type {
+  ActivityEntry,
+  Comment,
+  KanbanColumn,
+  Task,
+} from "../../../model/types";
+import { getTaskStatusLabel } from "../../shared/taskStatus";
 import {
   useActivity,
   useComments,
@@ -23,22 +29,35 @@ import {
   useDeleteComment,
   useUpdateComment,
 } from "../../../model/useComments";
-import { mockUsers } from "@/features/users/model/mockUsers";
+import { useAuth } from "@/features/auth/model/useAuth";
+import { useUsers } from "@/features/users";
+import {
+  getUserAvatarUrl,
+  getUserInitials,
+} from "@/features/auth/model/userAvatar";
 
-// ─── Current user (in real app, from auth context) ─────────────────────────────
-const CURRENT_USER = mockUsers[0];
-const CURRENT_USER_ID = CURRENT_USER.id;
-
+function ActivityAvatar({ name }: { name: string }) {
+  return (
+    <Avatar className="w-8 h-8 shrink-0 ring-4 ring-background relative z-10 bg-background">
+      <AvatarImage src={getUserAvatarUrl({ name })} />
+      <AvatarFallback className="text-[10px] bg-primary/10 text-primary font-semibold">
+        {getUserInitials(name)}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
 function CommentItem({
   comment,
   taskId,
   isAllTab,
+  currentUserId,
 }: {
   comment: Comment;
   taskId: string;
   isAllTab?: boolean;
+  currentUserId?: string;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editBody, setEditBody] = useState(comment.body);
@@ -49,7 +68,7 @@ function CommentItem({
   const { mutate: deleteComment, isPending: isDeleting } =
     useDeleteComment(taskId);
 
-  const isOwn = comment.authorId === CURRENT_USER_ID;
+  const isOwn = comment.authorId === currentUserId;
 
   const handleSaveEdit = () => {
     if (!editBody.trim() || editBody === comment.body) {
@@ -70,12 +89,7 @@ function CommentItem({
 
   return (
     <div className="flex gap-4 group/comment relative">
-      <Avatar className="w-8 h-8 shrink-0 ring-4 ring-background relative z-10 bg-background">
-        <AvatarImage src={comment.author.avatarUrl} />
-        <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-          {comment.author.name.charAt(0)}
-        </AvatarFallback>
-      </Avatar>
+      <ActivityAvatar name={comment.author.name} />
 
       <div className="flex-1 min-w-0">
         <div className="bg-card border border-border/60 shadow-sm rounded-xl overflow-hidden transition-colors hover:border-border/80">
@@ -218,6 +232,98 @@ function CommentItem({
   );
 }
 
+function isUuidLike(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+function titleCase(value: string) {
+  return value
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^./, (char) => char.toUpperCase());
+}
+
+function parseLabelList(value: string) {
+  if (!value || value === "[]") return "None";
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.length > 0 ? parsed.join(", ") : "None";
+    }
+  } catch {
+    // Fall through to plain text formatting.
+  }
+  return value;
+}
+
+function formatDateValue(value: string) {
+  if (!value) return "None";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatActivityField(field: string) {
+  const labels: Record<string, string> = {
+    assigneeId: "assignee",
+    columnId: "status",
+    dueDate: "due date",
+    parentId: "parent",
+    rank: "position",
+  };
+  return labels[field] ?? titleCase(field).toLowerCase();
+}
+
+type ActivityUser = { id: string; name: string; avatarUrl?: string | null };
+
+function formatParentValue(value: string, tasks: Task[] = []) {
+  if (!value) return "None";
+  const parent = tasks.find((task) => task.id === value);
+  return parent ? `${parent.code} ${parent.title}` : "Unknown parent";
+}
+
+function findActivityUser(
+  value: string,
+  users: ActivityUser[] = [],
+  tasks: Task[] = [],
+) {
+  const user = users.find((candidate) => candidate.id === value);
+  if (user) return user;
+  return tasks
+    .flatMap((task) => [task.assignee, task.reporter])
+    .find((candidate) => candidate?.id === value);
+}
+
+function formatActivityValue(
+  entry: ActivityEntry,
+  value: string,
+  columns: KanbanColumn[] = [],
+  tasks: Task[] = [],
+  users: ActivityUser[] = [],
+) {
+  if (entry.field === "assigneeId" || entry.field === "reporterId") {
+    if (!value) return "Unassigned";
+    const user = findActivityUser(value, users, tasks);
+    return user?.name ?? "Unknown user";
+  }
+  if (!value) return "None";
+  if (entry.field === "labels") return parseLabelList(value);
+  if (entry.field === "columnId") return getTaskStatusLabel(value, columns);
+  if (entry.field === "parentId") return formatParentValue(value, tasks);
+  if (entry.field === "dueDate") return formatDateValue(value);
+  if (entry.field === "commented" && isUuidLike(value)) return "Comment added";
+  if (entry.field.endsWith("Id") && isUuidLike(value)) return "Updated";
+  if (entry.field === "rank") return "Updated";
+  return value || "None";
+}
 // ─── Status color map for history badges ──────────────────────────────────────
 const STATUS_BADGE: Record<string, string> = {
   "To Do":
@@ -298,21 +404,45 @@ function FieldChip({
 function ActivityItem({
   entry,
   isAllTab,
+  columns = [],
+  tasks = [],
+  users = [],
 }: {
   entry: ActivityEntry;
   isAllTab?: boolean;
+  columns?: KanbanColumn[];
+  tasks?: Task[];
+  users?: ActivityUser[];
 }) {
-  const isComment = entry.field === "comment";
+  const isComment = entry.field === "comment" || entry.field === "commented";
+  const fromUser =
+    entry.field === "assigneeId" || entry.field === "reporterId"
+      ? findActivityUser(entry.from || "", users, tasks)
+      : undefined;
+  const toUser =
+    entry.field === "assigneeId" || entry.field === "reporterId"
+      ? findActivityUser(entry.to || "", users, tasks)
+      : undefined;
   const actionLabel = isComment ? "added a comment" : `changed`;
+  const fieldLabel = formatActivityField(entry.field);
+  const fromValue = formatActivityValue(
+    entry,
+    entry.from || "",
+    columns,
+    tasks,
+    users,
+  );
+  const toValue = formatActivityValue(
+    entry,
+    entry.to || "",
+    columns,
+    tasks,
+    users,
+  );
 
   return (
     <div className="flex gap-4 relative group/activity">
-      <Avatar className="w-8 h-8 shrink-0 ring-4 ring-background relative z-10 bg-background">
-        <AvatarImage src={entry.actor.avatarUrl} />
-        <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-          {entry.actor.name.charAt(0)}
-        </AvatarFallback>
-      </Avatar>
+      <ActivityAvatar name={entry.actor.name} />
 
       <div className="flex-1 min-w-0 pt-1 pb-2">
         <div className="flex items-start justify-between gap-4">
@@ -327,7 +457,7 @@ function ActivityItem({
               </span>
               {!isComment && (
                 <span className="font-semibold text-foreground capitalize ml-1">
-                  {entry.field}
+                  {fieldLabel}
                 </span>
               )}
             </p>
@@ -350,17 +480,27 @@ function ActivityItem({
         {/* From → To */}
         {isComment ? (
           <p className="text-[13px] text-muted-foreground italic line-clamp-2 mt-2">
-            &ldquo;{entry.to}&rdquo;
+            &ldquo;{toValue}&rdquo;
           </p>
         ) : (
           <div className="mt-2.5 flex items-center gap-2 flex-wrap">
             <FieldChip
-              value={entry.from || "None"}
-              avatar={entry.fromAvatar}
+              value={fromValue}
+              avatar={
+                entry.fromAvatar ??
+                (fromUser ? getUserAvatarUrl(fromUser) : undefined)
+              }
               isOld
             />
             <ArrowRight className="w-3.5 h-3.5 text-muted-foreground/50 mx-0.5 shrink-0" />
-            <FieldChip value={entry.to} avatar={entry.toAvatar} isNew />
+            <FieldChip
+              value={toValue}
+              avatar={
+                entry.toAvatar ??
+                (toUser ? getUserAvatarUrl(toUser) : undefined)
+              }
+              isNew
+            />
           </div>
         )}
       </div>
@@ -374,14 +514,32 @@ type Tab = "all" | "comments" | "history" | "worklog";
 
 interface TaskActivityProps {
   taskId: string;
+  columns?: KanbanColumn[];
+  tasks?: Task[];
 }
 
-export function TaskActivity({ taskId }: TaskActivityProps) {
+export function TaskActivity({
+  taskId,
+  columns = [],
+  tasks = [],
+}: TaskActivityProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("comments");
   const [isAscending, setIsAscending] = useState(false);
   const [comment, setComment] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const { user } = useAuth();
+  const { users } = useUsers();
+  const currentUser = useMemo(
+    () => ({
+      avatarUrl: getUserAvatarUrl(user),
+      id: user?.id ?? "",
+      initials: getUserInitials(user?.name),
+      name: user?.name ?? "Current user",
+    }),
+    [user],
+  );
 
   const { comments: rawComments, isLoading: loadingComments } =
     useComments(taskId);
@@ -390,8 +548,17 @@ export function TaskActivity({ taskId }: TaskActivityProps) {
   const { mutate: postComment, isPending: isPosting } =
     useCreateComment(taskId);
 
-  const comments = isAscending ? [...rawComments].reverse() : rawComments;
-  const entries = isAscending ? [...rawEntries].reverse() : rawEntries;
+  const sortByCreatedAt = <Item extends { createdAt: string }>(items: Item[]) =>
+    [...items].sort((a, b) => {
+      const diff =
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      return isAscending ? -diff : diff;
+    });
+
+  const comments = sortByCreatedAt(rawComments);
+  const entries = sortByCreatedAt(rawEntries).filter(
+    (entry) => entry.field !== "rank",
+  );
 
   const handleSubmit = () => {
     const body = comment.trim();
@@ -402,7 +569,7 @@ export function TaskActivity({ taskId }: TaskActivityProps) {
   const allItems = [
     ...comments.map((c) => ({ type: "comment" as const, item: c })),
     ...entries
-      .filter((e) => e.field !== "comment")
+      .filter((e) => e.field !== "comment" && e.field !== "commented")
       .map((e) => ({ type: "activity" as const, item: e })),
   ].sort((a, b) => {
     const diff =
@@ -475,12 +642,8 @@ export function TaskActivity({ taskId }: TaskActivityProps) {
           {/* Comment input — visible on All and Comments tabs */}
           {(activeTab === "all" || activeTab === "comments") && (
             <div className="flex gap-4 mb-8">
-              <Avatar className="w-8 h-8 shrink-0 border border-border/50">
-                <AvatarImage src={CURRENT_USER.avatarUrl} />
-                <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-                  {CURRENT_USER.name.charAt(0)}
-                </AvatarFallback>
-              </Avatar>
+              <ActivityAvatar name={currentUser.name} />
+
               <div className="flex-1 border border-border/60 rounded-xl overflow-hidden focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/20 transition-all shadow-sm">
                 <Textarea
                   ref={textareaRef}
@@ -538,12 +701,16 @@ export function TaskActivity({ taskId }: TaskActivityProps) {
                       comment={item as Comment}
                       taskId={taskId}
                       isAllTab
+                      currentUserId={currentUser.id}
                     />
                   ) : (
                     <ActivityItem
                       key={item.id}
                       entry={item as ActivityEntry}
                       isAllTab
+                      columns={columns}
+                      tasks={tasks}
+                      users={users}
                     />
                   ),
                 )
@@ -560,7 +727,12 @@ export function TaskActivity({ taskId }: TaskActivityProps) {
                 />
               ) : (
                 comments.map((c) => (
-                  <CommentItem key={c.id} comment={c} taskId={taskId} />
+                  <CommentItem
+                    key={c.id}
+                    comment={c}
+                    taskId={taskId}
+                    currentUserId={currentUser.id}
+                  />
                 ))
               ))}
 
@@ -568,15 +740,26 @@ export function TaskActivity({ taskId }: TaskActivityProps) {
             {activeTab === "history" &&
               (loadingActivity ? (
                 <ActivitySkeleton />
-              ) : entries.filter((e) => e.field !== "comment").length === 0 ? (
+              ) : entries.filter(
+                  (e) => e.field !== "comment" && e.field !== "commented",
+                ).length === 0 ? (
                 <EmptyState
                   icon={<Clock className="w-8 h-8" />}
                   label="No history recorded yet"
                 />
               ) : (
                 entries
-                  .filter((e) => e.field !== "comment")
-                  .map((e) => <ActivityItem key={e.id} entry={e} />)
+                  .filter(
+                    (e) => e.field !== "comment" && e.field !== "commented",
+                  )
+                  .map((e) => (
+                    <ActivityItem
+                      key={e.id}
+                      entry={e}
+                      columns={columns}
+                      tasks={tasks}
+                    />
+                  ))
               ))}
 
             {/* WORKLOG TAB */}

@@ -1,5 +1,6 @@
 import { useUpdateTask } from "@/features/tasks";
 import type {
+  KanbanColumn,
   Task,
   TaskFieldUpdater,
   TaskUpdateData,
@@ -16,6 +17,7 @@ interface TaskDetailPanelProps {
   onOpenTask?: (task: Task) => void;
   /** Show Close/Expand buttons in header (for split-view outside a Dialog) */
   showCloseButton?: boolean;
+  columns?: KanbanColumn[];
 }
 
 export function TaskDetailPanel({
@@ -24,6 +26,7 @@ export function TaskDetailPanel({
   onDelete,
   onOpenTask,
   showCloseButton,
+  columns,
 }: TaskDetailPanelProps) {
   const updateTask = useUpdateTask();
 
@@ -53,12 +56,14 @@ export function TaskDetailPanel({
           task={task}
           handleUpdate={handleUpdate}
           onOpenTask={onOpenTask}
+          columns={columns}
           className="w-full flex-1 shrink-0 flex flex-col overflow-hidden border-r-0 lg:border-r border-border/40 bg-card"
         />
         <TaskSidebar
           task={task}
           handleUpdate={handleUpdate}
           onOpenTask={onOpenTask}
+          columns={columns}
           className="w-1/3 min-w-[340px] max-w-[550px] shrink-0 bg-muted/10 hidden lg:flex flex-col overflow-hidden relative border-l border-transparent z-10 shadow-[-10px_0_15px_-3px_rgba(0,0,0,0.03)] dark:shadow-none"
         />
       </div>

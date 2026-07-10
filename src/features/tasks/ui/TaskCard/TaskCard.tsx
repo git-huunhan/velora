@@ -7,9 +7,9 @@ import {
   CalendarIcon,
   ClipboardList,
   Crown,
+  Loader2,
   MessageSquare,
   Paperclip,
-  Loader2,
   SquaresExclude,
 } from "lucide-react";
 import { useParams } from "react-router-dom";
@@ -18,8 +18,8 @@ import { useTasksByProject } from "../../model/useTasks";
 import { PriorityIcon } from "../PriorityIcon";
 import { TaskCardActions } from "./TaskCardActions";
 
-import { useViewSettingsStore } from "../../model/useViewSettingsStore";
 import { isSubtask } from "../../model/taskHierarchy";
+import { useViewSettingsStore } from "../../model/useViewSettingsStore";
 
 interface TaskCardProps {
   task: Task;
@@ -258,12 +258,9 @@ export function TaskCard({
       <div
         ref={setNodeRef}
         style={style}
-        className="relative flex flex-col rounded-xl border border-transparent p-3 mb-2.5"
+        className="relative mb-2.5 flex flex-col rounded-xl border border-transparent p-3 opacity-0 pointer-events-none"
       >
-        <div className="flex flex-col flex-1 opacity-0 pointer-events-none">
-          {cardContent}
-        </div>
-        <div className="absolute inset-0 rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 pointer-events-none" />
+        {cardContent}
       </div>
     );
   }

@@ -33,10 +33,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+import { useAuth } from "@/features/auth/model/useAuth";
+import { useProject } from "@/features/projects";
+import {
+  getUserAvatarUrl,
+  getUserInitials,
+} from "@/features/auth/model/userAvatar";
 import { useUsers } from "@/features/users";
-import { mockUsers } from "@/features/users/model/mockUsers";
 import { useTasksByProject } from "@/features/tasks/model/useTasks";
-import type { Task, TaskFieldUpdater } from "../../../model/types";
+import type {
+  KanbanColumn,
+  Task,
+  TaskFieldUpdater,
+} from "../../../model/types";
 import {
   getTaskParent,
   getValidParentTasks,
@@ -45,8 +54,16 @@ import {
 import { PriorityIcon } from "../../PriorityIcon";
 import { TaskStatusSelect } from "../../shared/TaskStatusSelect";
 
-const CURRENT_USER = mockUsers[0]; // In real app: from auth context
-const CURRENT_USER_ID = CURRENT_USER.id;
+function DetailAvatar({ name }: { name: string }) {
+  return (
+    <Avatar className="h-6 w-6 border border-border/50 shrink-0">
+      <AvatarImage src={getUserAvatarUrl({ name })} />
+      <AvatarFallback className="text-[10px] bg-primary/10 text-primary font-semibold">
+        {getUserInitials(name)}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
 
 interface TaskSidebarProps {
   task: Task;
@@ -54,6 +71,7 @@ interface TaskSidebarProps {
   onOpenTask?: (task: Task) => void;
   className?: string;
   hideStatusDropdown?: boolean;
+  columns?: KanbanColumn[];
 }
 
 export function TaskSidebar({
@@ -62,6 +80,7 @@ export function TaskSidebar({
   onOpenTask,
   className,
   hideStatusDropdown,
+  columns,
 }: TaskSidebarProps) {
   const [isDetailsOpen, setIsDetailsOpen] = useState(true);
   const [isAssigneeOpen, setIsAssigneeOpen] = useState(false);
@@ -70,12 +89,20 @@ export function TaskSidebar({
   const [isLabelsOpen, setIsLabelsOpen] = useState(false);
 
   const { users } = useUsers();
+  const { data: project } = useProject(task.projectId);
+  const { user: currentUser } = useAuth();
+  const currentUserId = currentUser?.id;
+  const projectMemberIds = new Set(project?.memberIds ?? []);
+  const selectableUsers =
+    projectMemberIds.size > 0
+      ? users.filter((user) => projectMemberIds.has(user.id))
+      : users;
 
   // Use current user as reporter fallback when no reporter is set
   const reporterDisplay = task.reporter ?? {
-    id: CURRENT_USER_ID,
-    name: CURRENT_USER.name,
-    avatarUrl: CURRENT_USER.avatarUrl ?? "",
+    id: currentUserId ?? "",
+    name: currentUser?.name ?? "Current user",
+    avatarUrl: getUserAvatarUrl(currentUser),
   };
 
   const { data: tasks = [] } = useTasksByProject(task.projectId);
@@ -97,6 +124,7 @@ export function TaskSidebar({
             <TaskStatusSelect
               value={task.status}
               onChange={(status) => handleUpdate("status", status)}
+              columns={columns}
             />
           </div>
         )}
@@ -233,12 +261,7 @@ export function TaskSidebar({
                       <button className="w-full h-8 px-2 flex items-center gap-2 bg-transparent hover:bg-muted/50 focus:ring-1 focus:ring-primary/50 rounded cursor-pointer transition-colors outline-none text-left">
                         {task.assignee ? (
                           <>
-                            <Avatar className="h-6 w-6 border border-border/50 shrink-0">
-                              <AvatarImage src={task.assignee.avatarUrl} />
-                              <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-                                {task.assignee.name.charAt(0)}
-                              </AvatarFallback>
-                            </Avatar>
+                            <DetailAvatar name={task.assignee.name} />
                             <span className="text-foreground font-medium text-[13px] truncate">
                               {task.assignee.name}
                             </span>
@@ -261,13 +284,13 @@ export function TaskSidebar({
                         <CommandList>
                           <CommandEmpty>No user found.</CommandEmpty>
                           <CommandGroup>
-                            {users
+                            {selectableUsers
                               .filter((user) => user.id !== task.assignee?.id)
                               .map((user) => (
                                 <CommandItem
                                   key={user.id}
                                   value={
-                                    user.id === "user-1"
+                                    user.id === currentUserId
                                       ? `${user.name} (Assign to me)`
                                       : user.name
                                   }
@@ -277,13 +300,8 @@ export function TaskSidebar({
                                   }}
                                   className="gap-2 cursor-pointer"
                                 >
-                                  <Avatar className="h-6 w-6">
-                                    <AvatarImage src={user.avatarUrl} />
-                                    <AvatarFallback>
-                                      {user.name.charAt(0)}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  {user.id === "user-1"
+                                  <DetailAvatar name={user.name} />
+                                  {user.id === currentUserId
                                     ? `${user.name} (Assign to me)`
                                     : user.name}
                                 </CommandItem>
@@ -304,16 +322,19 @@ export function TaskSidebar({
                     </PopoverContent>
                   </Popover>
 
-                  {task.assignee?.id !== CURRENT_USER_ID && (
-                    <button
-                      className="text-[13px] text-primary hover:underline font-medium px-2 mt-0.5 transition-colors"
-                      onClick={() =>
-                        handleUpdate("assigneeId", CURRENT_USER_ID)
-                      }
-                    >
-                      Assign to me
-                    </button>
-                  )}
+                  {currentUserId &&
+                    (projectMemberIds.size === 0 ||
+                      projectMemberIds.has(currentUserId)) &&
+                    task.assignee?.id !== currentUserId && (
+                      <button
+                        className="text-[13px] text-primary hover:underline font-medium px-2 mt-0.5 transition-colors"
+                        onClick={() =>
+                          handleUpdate("assigneeId", currentUserId)
+                        }
+                      >
+                        Assign to me
+                      </button>
+                    )}
                 </div>
               </div>
 
@@ -463,12 +484,7 @@ export function TaskSidebar({
                       <button className="w-full h-8 px-2 flex items-center gap-2 bg-transparent hover:bg-muted/50 focus:ring-1 focus:ring-primary/50 rounded cursor-pointer transition-colors outline-none text-left">
                         {reporterDisplay ? (
                           <>
-                            <Avatar className="h-6 w-6 border border-border/50 shrink-0">
-                              <AvatarImage src={reporterDisplay.avatarUrl} />
-                              <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-                                {reporterDisplay.name.charAt(0)}
-                              </AvatarFallback>
-                            </Avatar>
+                            <DetailAvatar name={reporterDisplay.name} />
                             <span className="text-foreground font-medium text-[13px] truncate">
                               {reporterDisplay.name}
                               {!task.reporter && (
@@ -487,7 +503,7 @@ export function TaskSidebar({
                         <CommandList>
                           <CommandEmpty>No user found.</CommandEmpty>
                           <CommandGroup>
-                            {users
+                            {selectableUsers
                               .filter((user) => user.id !== task.reporter?.id)
                               .map((user) => (
                                 <CommandItem
@@ -499,12 +515,7 @@ export function TaskSidebar({
                                   }}
                                   className="gap-2 cursor-pointer"
                                 >
-                                  <Avatar className="h-6 w-6">
-                                    <AvatarImage src={user.avatarUrl} />
-                                    <AvatarFallback>
-                                      {user.name.charAt(0)}
-                                    </AvatarFallback>
-                                  </Avatar>
+                                  <DetailAvatar name={user.name} />
                                   {user.name}
                                 </CommandItem>
                               ))}

@@ -4,6 +4,7 @@ import {
   createTask,
   deleteTask,
   getTasksByProjectId,
+  moveTask,
   updateTask,
   updateTaskStatus,
 } from "../api/tasksApi";
@@ -21,7 +22,10 @@ export function useTasksByProject(projectId: string) {
     queryKey: tasksKeys.byProject(projectId),
     queryFn: () => getTasksByProjectId(projectId),
     enabled: !!projectId,
-    staleTime: 2000, // Prevent immediate background refetch after mutations (avoids DnD interruption)
+    staleTime: 60_000,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -208,13 +212,40 @@ export function useUpdateTask() {
     },
   });
 }
+export function useMoveTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      taskId,
+      data,
+    }: {
+      taskId: string;
+      data: {
+        afterTaskId?: string;
+        beforeTaskId?: string;
+        targetColumnId: TaskStatus;
+        targetParentId?: string | null;
+      };
+    }) => moveTask(taskId, data),
+    onSuccess: (updatedTask) => {
+      return Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: tasksKeys.byProject(updatedTask.projectId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: commentKeys.activity(updatedTask.id),
+        }),
+      ]);
+    },
+  });
+}
 export function useDeleteTask() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ taskId }: { taskId: string; projectId: string }) =>
       deleteTask(taskId),
     onSuccess: (_data, { projectId }) => {
-      queryClient.invalidateQueries({
+      return queryClient.invalidateQueries({
         queryKey: tasksKeys.byProject(projectId),
       });
     },

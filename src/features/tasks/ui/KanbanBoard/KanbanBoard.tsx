@@ -1,10 +1,5 @@
-import type {
-  DragEndEvent,
-  DragOverEvent,
-  DragStartEvent,
-} from "@dnd-kit/core";
+import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import {
-  defaultDropAnimationSideEffects,
   DndContext,
   DragOverlay,
   KeyboardSensor,
@@ -23,7 +18,7 @@ import {
   Plus,
   User as UserIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { useIsMutating } from "@tanstack/react-query";
@@ -37,6 +32,7 @@ import {
   useCreateColumn,
   useDeleteColumn,
   useDeleteTask,
+  useMoveTask,
   useProjectColumns,
   useReorderColumns,
   useTasksByProject,
@@ -256,6 +252,7 @@ export function KanbanBoard({
   const reorderColumns = useReorderColumns(projectId);
   const serverTasks = serverTaskData ?? EMPTY_TASKS;
   const [localTasks, setLocalTasks] = useState<Task[]>([]);
+  const [isDropPersisting, setIsDropPersisting] = useState(false);
   const [isAddingColumn, setIsAddingColumn] = useState(false);
   const [newColumnTitle, setNewColumnTitle] = useState("");
   const [draggedColumnId, setDraggedColumnId] = useState<TaskStatus | null>(
@@ -281,12 +278,12 @@ export function KanbanBoard({
     }
     // While dragging (check ref) OR mutating (updating to server), skip sync
     // This prevents stale server responses from overwriting optimistic local state
-    if (isDraggingRef.current || isMutating > 0) return;
+    if (isDraggingRef.current || isDropPersisting || isMutating > 0) return;
 
     // Merge: preserve the current local order but update any field that changed on the server.
     // Also add newly-created tasks and remove deleted ones.
     setLocalTasks((previous) => mergeServerTasks(previous, serverTasks));
-  }, [serverTasks, isMutating, isLoading, projectId]);
+  }, [serverTasks, isMutating, isLoading, projectId, isDropPersisting]);
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
@@ -302,12 +299,14 @@ export function KanbanBoard({
 
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
+  const moveTask = useMoveTask();
   const deleteTask = useDeleteTask();
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const previousLocalTasksRef = useRef<Task[]>([]);
+  const lastDragOverSignatureRef = useRef<string | null>(null);
   const [draggingGroups, setDraggingGroups] = useState<{
     grouped: string[];
     hasUngrouped: boolean;
@@ -363,10 +362,10 @@ export function KanbanBoard({
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
-
   const onDragStart = (event: DragStartEvent) => {
     isDraggingRef.current = true; // set ref BEFORE setActiveId (synchronous)
     setActiveId(event.active.id as string);
+    lastDragOverSignatureRef.current = null;
     previousLocalTasksRef.current = localTasks;
 
     // Capture currently visible groups to keep them alive during drag
@@ -390,183 +389,167 @@ export function KanbanBoard({
     });
   };
 
-  const onDragOver = (event: DragOverEvent) => {
+  const getDroppedTaskPreview = (event: DragEndEvent, sourceTasks: Task[]) => {
     const { active, over } = event;
-    if (!over) return;
+    if (
+      !over ||
+      active.id === over.id ||
+      active.data.current?.type !== "Task"
+    ) {
+      return sourceTasks;
+    }
 
     const activeId = active.id;
     const overId = over.id;
-
-    if (activeId === overId) return;
-
-    const isActiveTask = active.data.current?.type === "Task";
     const isOverTask = over.data.current?.type === "Task";
     const isOverColumn = over.data.current?.type === "Column";
+    const activeIndex = sourceTasks.findIndex((task) => task.id === activeId);
 
-    if (!isActiveTask) return;
+    if (activeIndex < 0) return sourceTasks;
 
-    setLocalTasks((tasks) => {
-      const activeIndex = tasks.findIndex((t) => t.id === activeId);
+    if (isOverTask) {
+      const overIndex = sourceTasks.findIndex((task) => task.id === overId);
+      if (overIndex < 0) return sourceTasks;
 
-      if (isOverTask) {
-        const overIndex = tasks.findIndex((t) => t.id === overId);
-        const overTask = tasks[overIndex];
-        const overStatus = overTask.status;
-        const activeTask = tasks[activeIndex];
+      const activeTask = sourceTasks[activeIndex];
+      const overTask = sourceTasks[overIndex];
+      const newActiveTask = { ...activeTask, status: overTask.status };
 
-        let shouldUpdate = false;
-        const newActiveTask = { ...activeTask };
-
-        if (activeTask.status !== overStatus) {
-          newActiveTask.status = overStatus;
-          shouldUpdate = true;
-        }
-
-        // Handle moving between swimlanes
-        if (
-          groupBy === "Assignee" &&
-          activeTask.assigneeId !== overTask.assigneeId
-        ) {
-          newActiveTask.assigneeId = overTask.assigneeId;
-          if (overTask.assigneeId) {
-            const newUser = mockUsers.find((u) => u.id === overTask.assigneeId);
-            if (newUser) {
-              newActiveTask.assignee = {
+      if (groupBy === "Assignee") {
+        newActiveTask.assigneeId = overTask.assigneeId;
+        if (overTask.assigneeId) {
+          const newUser = mockUsers.find(
+            (user) => user.id === overTask.assigneeId,
+          );
+          newActiveTask.assignee = newUser
+            ? {
                 id: newUser.id,
                 name: newUser.name,
                 avatarUrl: newUser.avatarUrl || "",
-              };
-            }
-          } else {
-            newActiveTask.assignee = undefined;
-          }
-          shouldUpdate = true;
-        } else if (groupBy === "Epic" || groupBy === "Subtask") {
-          const currentLaneId = getTaskLaneId(activeTask, tasks, groupBy);
-          const targetLaneId = getTaskLaneId(overTask, tasks, groupBy);
-          if (
-            groupBy === "Subtask" &&
-            isSubtask(activeTask, tasks) &&
-            !targetLaneId
-          ) {
-            return tasks;
-          }
-          const targetParentId =
-            currentLaneId === targetLaneId ||
-            (groupBy === "Subtask" && targetLaneId === activeTask.id)
-              ? activeTask.parentId
-              : targetLaneId;
-          if (
-            !validateParentAssignment(activeTask, targetParentId, tasks).valid
-          ) {
-            return tasks;
-          }
-
-          if (activeTask.parentId !== targetParentId) {
-            newActiveTask.parentId = targetParentId;
-            shouldUpdate = true;
-          }
-        }
-
-        const newTasks = [...tasks];
-        const activeTaskObj = newTasks.splice(activeIndex, 1)[0];
-
-        if (shouldUpdate) {
-          Object.assign(activeTaskObj, newActiveTask);
-        }
-
-        const targetIndex = newTasks.findIndex((t) => t.id === overId);
-
-        // Determine if we should insert below or above based on pointer position
-        const isBelowOverItem =
-          over &&
-          active.rect.current.translated &&
-          active.rect.current.translated.top >
-            over.rect.top + over.rect.height / 2;
-
-        const insertIndex = isBelowOverItem ? targetIndex + 1 : targetIndex;
-        newTasks.splice(insertIndex, 0, activeTaskObj);
-
-        return newTasks;
-      }
-
-      if (isOverColumn) {
-        const overStatus = over.data.current?.column as TaskStatus;
-        const overGroupId = over.data.current?.groupId as string | undefined;
-        const activeTask = tasks[activeIndex];
-
-        let shouldUpdate = false;
-        const newActiveTask = { ...activeTask };
-
-        if (activeTask.status !== overStatus) {
-          newActiveTask.status = overStatus;
-          shouldUpdate = true;
-        }
-
-        if (groupBy === "Assignee") {
-          const targetAssigneeId =
-            overGroupId === "ungrouped" ? undefined : overGroupId;
-          if (activeTask.assigneeId !== targetAssigneeId) {
-            newActiveTask.assigneeId = targetAssigneeId;
-            if (targetAssigneeId) {
-              const newUser = mockUsers.find((u) => u.id === targetAssigneeId);
-              if (newUser) {
-                newActiveTask.assignee = {
-                  id: newUser.id,
-                  name: newUser.name,
-                  avatarUrl: newUser.avatarUrl || "",
-                };
               }
-            } else {
-              newActiveTask.assignee = undefined;
-            }
-            shouldUpdate = true;
-          }
-        } else if (groupBy === "Epic" || groupBy === "Subtask") {
-          const currentLaneId = getTaskLaneId(activeTask, tasks, groupBy);
-          const targetLaneId =
-            overGroupId === "ungrouped" ? undefined : overGroupId;
-          if (
-            groupBy === "Subtask" &&
-            isSubtask(activeTask, tasks) &&
-            !targetLaneId
-          ) {
-            return tasks;
-          }
-          const targetParentId =
-            currentLaneId === targetLaneId ||
-            (groupBy === "Subtask" && targetLaneId === activeTask.id)
-              ? activeTask.parentId
-              : targetLaneId;
-          if (
-            !validateParentAssignment(activeTask, targetParentId, tasks).valid
-          ) {
-            return tasks;
-          }
-          if (activeTask.parentId !== targetParentId) {
-            newActiveTask.parentId = targetParentId;
-            shouldUpdate = true;
-          }
+            : activeTask.assignee;
+        } else {
+          newActiveTask.assignee = undefined;
+        }
+      } else if (groupBy === "Epic" || groupBy === "Subtask") {
+        const currentLaneId = getTaskLaneId(activeTask, sourceTasks, groupBy);
+        const targetLaneId = getTaskLaneId(overTask, sourceTasks, groupBy);
+
+        if (
+          groupBy === "Subtask" &&
+          isSubtask(activeTask, sourceTasks) &&
+          !targetLaneId
+        ) {
+          return sourceTasks;
         }
 
-        const newTasks = [...tasks];
-        const activeTaskObj = newTasks.splice(activeIndex, 1)[0];
+        const targetParentId =
+          currentLaneId === targetLaneId ||
+          (groupBy === "Subtask" && targetLaneId === activeTask.id)
+            ? activeTask.parentId
+            : targetLaneId;
 
-        if (shouldUpdate) {
-          Object.assign(activeTaskObj, newActiveTask);
+        if (
+          !validateParentAssignment(activeTask, targetParentId, sourceTasks)
+            .valid
+        ) {
+          return sourceTasks;
         }
 
-        // When dropping on empty column, just put at the end
-        newTasks.push(activeTaskObj);
-        return newTasks;
+        newActiveTask.parentId = targetParentId;
       }
 
-      return tasks;
-    });
+      const nextTasks = [...sourceTasks];
+      const [activeTaskObj] = nextTasks.splice(activeIndex, 1);
+      Object.assign(activeTaskObj, newActiveTask);
+
+      const targetIndex = nextTasks.findIndex((task) => task.id === overId);
+      const activeCenterY = active.rect.current.translated
+        ? active.rect.current.translated.top +
+          active.rect.current.translated.height / 2
+        : null;
+      const overCenterY = over.rect.top + over.rect.height / 2;
+      const isBelowOverItem =
+        activeCenterY !== null && activeCenterY > overCenterY;
+      const insertIndex = isBelowOverItem ? targetIndex + 1 : targetIndex;
+
+      nextTasks.splice(insertIndex, 0, activeTaskObj);
+      return nextTasks;
+    }
+
+    if (isOverColumn) {
+      const activeTask = sourceTasks[activeIndex];
+      const overStatus = over.data.current?.column as TaskStatus;
+      const overGroupId = over.data.current?.groupId as string | undefined;
+      const newActiveTask = { ...activeTask, status: overStatus };
+
+      if (groupBy === "Assignee") {
+        const targetAssigneeId =
+          overGroupId === "ungrouped" ? undefined : overGroupId;
+        newActiveTask.assigneeId = targetAssigneeId;
+        if (targetAssigneeId) {
+          const newUser = mockUsers.find(
+            (user) => user.id === targetAssigneeId,
+          );
+          newActiveTask.assignee = newUser
+            ? {
+                id: newUser.id,
+                name: newUser.name,
+                avatarUrl: newUser.avatarUrl || "",
+              }
+            : activeTask.assignee;
+        } else {
+          newActiveTask.assignee = undefined;
+        }
+      } else if (groupBy === "Epic" || groupBy === "Subtask") {
+        const currentLaneId = getTaskLaneId(activeTask, sourceTasks, groupBy);
+        const targetLaneId =
+          overGroupId === "ungrouped" ? undefined : overGroupId;
+
+        if (
+          groupBy === "Subtask" &&
+          isSubtask(activeTask, sourceTasks) &&
+          !targetLaneId
+        ) {
+          return sourceTasks;
+        }
+
+        const targetParentId =
+          currentLaneId === targetLaneId ||
+          (groupBy === "Subtask" && targetLaneId === activeTask.id)
+            ? activeTask.parentId
+            : targetLaneId;
+
+        if (
+          !validateParentAssignment(activeTask, targetParentId, sourceTasks)
+            .valid
+        ) {
+          return sourceTasks;
+        }
+
+        newActiveTask.parentId = targetParentId;
+      }
+
+      const nextTasks = [...sourceTasks];
+      const [activeTaskObj] = nextTasks.splice(activeIndex, 1);
+      Object.assign(activeTaskObj, newActiveTask);
+      nextTasks.push(activeTaskObj);
+      return nextTasks;
+    }
+
+    return sourceTasks;
+  };
+
+  const onDragCancel = () => {
+    isDraggingRef.current = false;
+    lastDragOverSignatureRef.current = null;
+    setActiveId(null);
+    setLocalTasks(previousLocalTasksRef.current);
   };
 
   const onDragEnd = (event: DragEndEvent) => {
     isDraggingRef.current = false; // reset ref immediately when drag ends
+    lastDragOverSignatureRef.current = null;
     setActiveId(null);
     const { active, over } = event;
     if (!over) {
@@ -575,7 +558,11 @@ export function KanbanBoard({
     }
 
     const activeIdStr = active.id as string;
-    const updatedTask = localTasks.find((t) => t.id === activeIdStr);
+    const sourceTasks = previousLocalTasksRef.current.length
+      ? previousLocalTasksRef.current
+      : localTasks;
+    const droppedTasks = getDroppedTaskPreview(event, sourceTasks);
+    const updatedTask = droppedTasks.find((t) => t.id === activeIdStr);
     if (updatedTask) {
       const originalTask = serverTasks.find((t) => t.id === activeIdStr);
       const dataToUpdate: TaskUpdateData = {};
@@ -600,8 +587,8 @@ export function KanbanBoard({
             updatedTask.parentId === undefined ? null : updatedTask.parentId;
         }
 
-        const laneTasks = localTasks.filter((task) =>
-          isTaskInSameLane(task, updatedTask, localTasks, groupBy),
+        const laneTasks = droppedTasks.filter((task) =>
+          isTaskInSameLane(task, updatedTask, droppedTasks, groupBy),
         );
         const movedIndex = laneTasks.findIndex(
           (task) => task.id === updatedTask.id,
@@ -616,20 +603,54 @@ export function KanbanBoard({
         }
 
         if (Object.keys(dataToUpdate).length > 0) {
-          setLocalTasks((tasks) =>
-            tasks.map((task) =>
+          setLocalTasks(
+            droppedTasks.map((task) =>
               task.id === updatedTask.id ? { ...task, order: nextOrder } : task,
             ),
           );
-          updateTask.mutate(
-            { taskId: updatedTask.id, data: dataToUpdate },
-            {
-              onError: () => {
-                setLocalTasks(previousLocalTasksRef.current);
-                toast.error("Failed to save task position");
+
+          const shouldMoveTask =
+            dataToUpdate.status !== undefined ||
+            dataToUpdate.parentId !== undefined ||
+            dataToUpdate.order !== undefined;
+
+          setIsDropPersisting(true);
+
+          if (shouldMoveTask) {
+            moveTask.mutate(
+              {
+                taskId: updatedTask.id,
+                data: {
+                  afterTaskId: laneTasks[movedIndex - 1]?.id,
+                  beforeTaskId: laneTasks[movedIndex + 1]?.id,
+                  targetColumnId: updatedTask.status,
+                  targetParentId: updatedTask.parentId ?? null,
+                },
               },
-            },
-          );
+              {
+                onError: () => {
+                  setLocalTasks(previousLocalTasksRef.current);
+                  toast.error("Failed to save task position");
+                },
+                onSettled: () => {
+                  setIsDropPersisting(false);
+                },
+              },
+            );
+          } else {
+            updateTask.mutate(
+              { taskId: updatedTask.id, data: dataToUpdate },
+              {
+                onError: () => {
+                  setLocalTasks(previousLocalTasksRef.current);
+                  toast.error("Failed to save task position");
+                },
+                onSettled: () => {
+                  setIsDropPersisting(false);
+                },
+              },
+            );
+          }
         }
       }
     }
@@ -677,93 +698,103 @@ export function KanbanBoard({
     }
   };
 
-  const getColumnManagementProps = (
-    column: (typeof columns)[number],
-    instanceKey: string,
-  ) => ({
-    column,
-    columns,
-    onRenameColumn: (title: string) =>
-      updateColumn.mutate({ columnId: column.id, data: { title } }),
-    onSetDoneColumn: () =>
-      updateColumn.mutate({ columnId: column.id, data: { isDone: true } }),
-    onDeleteColumn: async (targetColumnId?: string) => {
-      if (targetColumnId) {
-        const tasksToMove = localTasks.filter(
-          (task) => task.status === column.id,
-        );
-        await Promise.all(
-          tasksToMove.map((task) =>
-            updateTask.mutateAsync({
-              taskId: task.id,
-              data: { status: targetColumnId as TaskStatus },
-            }),
-          ),
-        );
-        setLocalTasks((tasks) =>
-          tasks.map((task) =>
-            task.status === column.id
-              ? { ...task, status: targetColumnId as TaskStatus }
-              : task,
-          ),
-        );
-      }
-      await deleteColumn.mutateAsync(column.id);
-      toast.success("Column deleted");
-    },
-    onColumnDragStart: () => setDraggedColumnId(column.id),
-    canReorderColumn: groupBy === "None",
-    isColumnDragging: draggedColumnId !== null,
-    onColumnDragEnd: () => {
-      setDraggedColumnId(null);
-      setColumnDropIndicator(null);
-    },
-    onColumnDragOver: (side: "before" | "after") => {
-      if (!draggedColumnId) return;
-      const sourceIndex = columns.findIndex(
-        (item) => item.id === draggedColumnId,
-      );
-      const targetIndex = columns.findIndex((item) => item.id === column.id);
-      const insertionIndex = side === "after" ? targetIndex + 1 : targetIndex;
-      if (
-        insertionIndex === sourceIndex ||
-        insertionIndex === sourceIndex + 1
-      ) {
+  const getColumnManagementProps = useCallback(
+    (column: (typeof columns)[number], instanceKey: string) => ({
+      column,
+      columns,
+      onRenameColumn: (title: string) =>
+        updateColumn.mutate({ columnId: column.id, data: { title } }),
+      onSetDoneColumn: () =>
+        updateColumn.mutate({ columnId: column.id, data: { isDone: true } }),
+      onDeleteColumn: async (targetColumnId?: string) => {
+        if (targetColumnId) {
+          const tasksToMove = localTasks.filter(
+            (task) => task.status === column.id,
+          );
+          await Promise.all(
+            tasksToMove.map((task) =>
+              updateTask.mutateAsync({
+                taskId: task.id,
+                data: { status: targetColumnId as TaskStatus },
+              }),
+            ),
+          );
+          setLocalTasks((tasks) =>
+            tasks.map((task) =>
+              task.status === column.id
+                ? { ...task, status: targetColumnId as TaskStatus }
+                : task,
+            ),
+          );
+        }
+        await deleteColumn.mutateAsync(column.id);
+        toast.success("Column deleted");
+      },
+      onColumnDragStart: () => setDraggedColumnId(column.id),
+      canReorderColumn: groupBy === "None",
+      isColumnDragging: draggedColumnId !== null,
+      onColumnDragEnd: () => {
+        setDraggedColumnId(null);
         setColumnDropIndicator(null);
-        return;
-      }
-      setColumnDropIndicator({ instanceKey, side });
-    },
-    dropIndicatorSide:
-      columnDropIndicator?.instanceKey === instanceKey
-        ? columnDropIndicator.side
-        : null,
-    onColumnDrop: (side: "before" | "after") => {
-      if (!draggedColumnId) return;
-      const ids = columns.map((item) => item.id);
-      const from = ids.indexOf(draggedColumnId);
-      const originalTargetIndex = ids.indexOf(column.id);
-      const originalInsertionIndex =
-        side === "after" ? originalTargetIndex + 1 : originalTargetIndex;
-      if (
-        originalInsertionIndex === from ||
-        originalInsertionIndex === from + 1
-      ) {
+      },
+      onColumnDragOver: (side: "before" | "after") => {
+        if (!draggedColumnId) return;
+        const sourceIndex = columns.findIndex(
+          (item) => item.id === draggedColumnId,
+        );
+        const targetIndex = columns.findIndex((item) => item.id === column.id);
+        const insertionIndex = side === "after" ? targetIndex + 1 : targetIndex;
+        if (
+          insertionIndex === sourceIndex ||
+          insertionIndex === sourceIndex + 1
+        ) {
+          setColumnDropIndicator(null);
+          return;
+        }
+        setColumnDropIndicator({ instanceKey, side });
+      },
+      dropIndicatorSide:
+        columnDropIndicator?.instanceKey === instanceKey
+          ? columnDropIndicator.side
+          : null,
+      onColumnDrop: (side: "before" | "after") => {
+        if (!draggedColumnId) return;
+        const ids = columns.map((item) => item.id);
+        const from = ids.indexOf(draggedColumnId);
+        const originalTargetIndex = ids.indexOf(column.id);
+        const originalInsertionIndex =
+          side === "after" ? originalTargetIndex + 1 : originalTargetIndex;
+        if (
+          originalInsertionIndex === from ||
+          originalInsertionIndex === from + 1
+        ) {
+          setColumnDropIndicator(null);
+          return;
+        }
+        const [movedColumnId] = ids.splice(from, 1);
+        if (!movedColumnId) return;
+        const targetIndex = ids.indexOf(column.id);
+        const insertionIndex = side === "after" ? targetIndex + 1 : targetIndex;
+        ids.splice(insertionIndex, 0, movedColumnId);
+        reorderColumns.mutate(ids, {
+          onError: () => toast.error("Failed to reorder columns"),
+        });
+        setDraggedColumnId(null);
         setColumnDropIndicator(null);
-        return;
-      }
-      const [movedColumnId] = ids.splice(from, 1);
-      if (!movedColumnId) return;
-      const targetIndex = ids.indexOf(column.id);
-      const insertionIndex = side === "after" ? targetIndex + 1 : targetIndex;
-      ids.splice(insertionIndex, 0, movedColumnId);
-      reorderColumns.mutate(ids, {
-        onError: () => toast.error("Failed to reorder columns"),
-      });
-      setDraggedColumnId(null);
-      setColumnDropIndicator(null);
-    },
-  });
+      },
+    }),
+    [
+      columns,
+      draggedColumnId,
+      columnDropIndicator,
+      localTasks,
+      updateTask,
+      deleteColumn,
+      updateColumn,
+      reorderColumns,
+      groupBy,
+    ],
+  );
 
   const handleEdit = (data: TaskFormData) => {
     if (!editingTask) return;
@@ -795,43 +826,62 @@ export function KanbanBoard({
     );
   };
 
-  const handleCardUpdate = (taskId: string, data: TaskUpdateData) => {
-    updateTask.mutate(
-      { taskId, data },
-      {
-        onError: () => toast.error("Failed to update task"),
-      },
-    );
-  };
+  const handleCardUpdate = useCallback(
+    (taskId: string, data: TaskUpdateData) => {
+      updateTask.mutate(
+        { taskId, data },
+        {
+          onError: () => toast.error("Failed to update task"),
+        },
+      );
+    },
+    [updateTask],
+  );
 
   const activeTask = useMemo(
     () => localTasks.find((t) => t.id === activeId),
     [activeId, localTasks],
   );
 
-  const baseFilteredTasks = filterTasks(localTasks, {
-    searchQuery,
-    parentIds,
-    assigneeIds,
-    priorities,
-    statuses,
-    workTypes,
-    labels,
-    hideEpics: true,
-    supportNoParent: true,
-    labelMatch: "any",
-  });
-  const filteredTasks =
-    groupBy === "Subtask"
-      ? baseFilteredTasks.filter(
-          (task) => getSubtaskLaneId(task, localTasks) !== task.id,
-        )
-      : baseFilteredTasks.filter((task) => {
-          const parent = task.parentId
-            ? localTasks.find((candidate) => candidate.id === task.parentId)
-            : undefined;
-          return !parent || parent.type === "epic";
-        });
+  const baseFilteredTasks = useMemo(
+    () =>
+      filterTasks(localTasks, {
+        searchQuery,
+        parentIds,
+        assigneeIds,
+        priorities,
+        statuses,
+        workTypes,
+        labels,
+        hideEpics: true,
+        supportNoParent: true,
+        labelMatch: "any",
+      }),
+    [
+      localTasks,
+      searchQuery,
+      parentIds,
+      assigneeIds,
+      priorities,
+      statuses,
+      workTypes,
+      labels,
+    ],
+  );
+
+  const filteredTasks = (() => {
+    if (groupBy === "Subtask") {
+      return baseFilteredTasks.filter(
+        (task) => getSubtaskLaneId(task, localTasks) !== task.id,
+      );
+    }
+
+    const tasksById = new Map(localTasks.map((task) => [task.id, task]));
+    return baseFilteredTasks.filter((task) => {
+      const parent = task.parentId ? tasksById.get(task.parentId) : undefined;
+      return !parent || parent.type === "epic";
+    });
+  })();
 
   if (isLoading)
     return (
@@ -858,8 +908,8 @@ export function KanbanBoard({
         sensors={sensors}
         collisionDetection={pointerWithin}
         onDragStart={onDragStart}
-        onDragOver={onDragOver}
         onDragEnd={onDragEnd}
+        onDragCancel={onDragCancel}
       >
         <div
           className="flex flex-col flex-1 min-h-0 overflow-x-auto overflow-y-auto px-6 pt-4 pb-6 md:px-8 md:pb-8 items-start relative custom-scrollbar"
@@ -1082,17 +1132,7 @@ export function KanbanBoard({
         </div>
 
         {createPortal(
-          <DragOverlay
-            dropAnimation={{
-              sideEffects: defaultDropAnimationSideEffects({
-                styles: {
-                  active: {
-                    opacity: "0.5",
-                  },
-                },
-              }),
-            }}
-          >
+          <DragOverlay dropAnimation={null}>
             {activeTask ? (
               <TaskCard task={activeTask} onClick={() => {}} isOverlay />
             ) : null}
@@ -1111,6 +1151,7 @@ export function KanbanBoard({
         }}
         onDelete={handleDelete}
         onOpenTask={setSelectedTask}
+        columns={columns}
       />
 
       {/* Edit modal */}
