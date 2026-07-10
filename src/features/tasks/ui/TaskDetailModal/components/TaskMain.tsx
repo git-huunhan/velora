@@ -956,7 +956,12 @@ export function TaskMain({
           </div>
 
           {/* Activity Section */}
-          <TaskActivity taskId={task.id} columns={columns} tasks={tasks} />
+          <TaskActivity
+            task={task}
+            taskId={task.id}
+            columns={columns}
+            tasks={tasks}
+          />
         </div>
       </div>
     </div>

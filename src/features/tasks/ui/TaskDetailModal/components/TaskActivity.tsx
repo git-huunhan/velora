@@ -415,6 +415,7 @@ function ActivityItem({
   users?: ActivityUser[];
 }) {
   const isComment = entry.field === "comment" || entry.field === "commented";
+  const isCreated = entry.field === "created";
   const fromUser =
     entry.field === "assigneeId" || entry.field === "reporterId"
       ? findActivityUser(entry.from || "", users, tasks)
@@ -423,7 +424,11 @@ function ActivityItem({
     entry.field === "assigneeId" || entry.field === "reporterId"
       ? findActivityUser(entry.to || "", users, tasks)
       : undefined;
-  const actionLabel = isComment ? "added a comment" : `changed`;
+  const actionLabel = isComment
+    ? "added a comment"
+    : isCreated
+      ? "created the Work item"
+      : `changed`;
   const fieldLabel = formatActivityField(entry.field);
   const fromValue = formatActivityValue(
     entry,
@@ -455,7 +460,7 @@ function ActivityItem({
               <span className="text-muted-foreground font-normal ml-1">
                 {actionLabel}
               </span>
-              {!isComment && (
+              {!isComment && !isCreated && (
                 <span className="font-semibold text-foreground capitalize ml-1">
                   {fieldLabel}
                 </span>
@@ -478,7 +483,7 @@ function ActivityItem({
         </div>
 
         {/* From → To */}
-        {isComment ? (
+        {isCreated ? null : isComment ? (
           <p className="text-[13px] text-muted-foreground italic line-clamp-2 mt-2">
             &ldquo;{toValue}&rdquo;
           </p>
@@ -513,12 +518,14 @@ function ActivityItem({
 type Tab = "all" | "comments" | "history" | "worklog";
 
 interface TaskActivityProps {
+  task: Task;
   taskId: string;
   columns?: KanbanColumn[];
   tasks?: Task[];
 }
 
 export function TaskActivity({
+  task,
   taskId,
   columns = [],
   tasks = [],
@@ -556,7 +563,32 @@ export function TaskActivity({
     });
 
   const comments = sortByCreatedAt(rawComments);
-  const entries = sortByCreatedAt(rawEntries).filter(
+  const entriesWithCreated = useMemo(() => {
+    if (rawEntries.some((entry) => entry.field === "created")) {
+      return rawEntries;
+    }
+
+    const actor = task.reporter ?? {
+      avatarUrl: "",
+      id: task.reporterId ?? "system",
+      name: "Unknown user",
+    };
+
+    const createdEntry: ActivityEntry = {
+      actor,
+      actorId: actor.id,
+      createdAt: task.createdAt,
+      field: "created",
+      from: "",
+      id: `created-${task.id}`,
+      taskId: task.id,
+      to: task.code || task.title,
+    };
+
+    return [...rawEntries, createdEntry];
+  }, [rawEntries, task]);
+
+  const entries = sortByCreatedAt(entriesWithCreated).filter(
     (entry) => entry.field !== "rank",
   );
 
