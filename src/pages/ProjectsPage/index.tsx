@@ -57,6 +57,10 @@ import {
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  getUserAvatarUrl,
+  getUserInitials,
+} from "@/features/auth/model/userAvatar";
 import { getSpaceAvatar } from "@/features/projects/model/avatars";
 
 export default function ProjectsPage() {
@@ -324,12 +328,9 @@ export default function ProjectsPage() {
                     <td className="p-3 px-4 align-middle">
                       <div className="flex items-center gap-2">
                         <Avatar className="h-6 w-6">
-                          <AvatarImage
-                            src={`https://api.dicebear.com/7.x/initials/svg?seed=${user?.name}&backgroundColor=10b981&textColor=ffffff&backgroundType=solid`}
-                            alt={user?.name}
-                          />
+                          <AvatarImage src={getUserAvatarUrl(user)} />
                           <AvatarFallback className="bg-primary/10 text-primary font-semibold text-[10px]">
-                            {user?.name?.substring(0, 2).toUpperCase() || "UN"}
+                            {getUserInitials(user?.name)}
                           </AvatarFallback>
                         </Avatar>
                         <span className="text-[13px] text-foreground">

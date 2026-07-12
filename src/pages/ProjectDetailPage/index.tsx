@@ -1,4 +1,5 @@
 import {
+  AlertCircle,
   Calendar,
   ClipboardList,
   FileText,
@@ -17,6 +18,7 @@ import { useParams } from "react-router-dom";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   Dialog,
   DialogContent,
@@ -101,13 +103,39 @@ export default function ProjectDetailPage() {
 
   if (isLoading)
     return (
-      <div className="p-10 text-center text-zinc-500">
-        Loading project details...
+      <div className="flex h-full flex-col bg-background p-6">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="h-8 w-8 animate-pulse rounded-md bg-muted" />
+          <div className="h-6 w-44 animate-pulse rounded bg-muted" />
+        </div>
+        <div className="mb-4 h-9 w-full max-w-xl animate-pulse rounded bg-muted" />
+        <div className="grid flex-1 grid-cols-1 gap-5 md:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div
+              key={index}
+              className="min-h-80 animate-pulse rounded-xl border border-border bg-card"
+            />
+          ))}
+        </div>
       </div>
     );
+
   if (isError || !project)
     return (
-      <div className="p-10 text-center text-red-500">Project not found</div>
+      <div className="flex h-full items-center justify-center bg-background p-6">
+        <div className="w-full max-w-md rounded-lg border bg-card text-card-foreground">
+          <EmptyState
+            icon={AlertCircle}
+            title="Project not found"
+            description="The project could not be loaded. It may have been archived, removed, or your session may need to be refreshed."
+            action={
+              <Button size="sm" onClick={() => window.location.reload()}>
+                Try again
+              </Button>
+            }
+          />
+        </div>
+      </div>
     );
 
   const toolbarNode =
