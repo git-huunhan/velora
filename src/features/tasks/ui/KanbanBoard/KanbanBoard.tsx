@@ -14,10 +14,13 @@ import { toast } from "sonner";
 import { useIsMutating } from "@tanstack/react-query";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { mockUsers } from "@/features/users/model/mockUsers";
+import {
+  getUserAvatarUrl,
+  getUserInitials,
+} from "@/features/auth/model/userAvatar";
+import { useUsers } from "@/features/users/model/useUsers";
 
 import {
-  KANBAN_COLUMNS,
   useCreateTask,
   useCreateColumn,
   useDeleteColumn,
@@ -116,7 +119,7 @@ import { useViewSettingsStore } from "../../model/useViewSettingsStore";
 function SwimlaneGroup({
   title,
   taskCount,
-  avatar,
+  avatarUserName,
   isFallbackGroup,
   parentTask,
   onParentTaskClick,
@@ -124,7 +127,7 @@ function SwimlaneGroup({
 }: {
   title: string;
   taskCount: number;
-  avatar?: string;
+  avatarUserName?: string;
   isFallbackGroup?: boolean;
   parentTask?: Task;
   onParentTaskClick?: (task: Task) => void;
@@ -179,17 +182,15 @@ function SwimlaneGroup({
             <span className="inline-flex h-5 translate-y-px items-center text-[11px] leading-none text-muted-foreground font-medium">
               ({taskCount} work item{taskCount !== 1 ? "s" : ""})
             </span>
-            <span className="ml-2 inline-flex h-5 items-center px-2 rounded-[4px] bg-secondary text-secondary-foreground text-[10px] leading-none font-bold uppercase tracking-wider">
-              {KANBAN_COLUMNS.find((c) => c.id === parentTask.status)?.title ||
-                parentTask.status}
-            </span>
           </button>
         )}
 
-        {!isFallbackGroup && !parentTask && avatar && (
+        {!isFallbackGroup && !parentTask && avatarUserName && (
           <Avatar className="w-6 h-6 border ml-1">
-            <AvatarImage src={avatar} />
-            <AvatarFallback>{title[0]}</AvatarFallback>
+            <AvatarImage src={getUserAvatarUrl({ name: avatarUserName })} />
+            <AvatarFallback className="text-[10px] bg-primary/10 text-primary font-semibold">
+              {getUserInitials(avatarUserName)}
+            </AvatarFallback>
           </Avatar>
         )}
 
@@ -199,7 +200,7 @@ function SwimlaneGroup({
           </div>
         )}
 
-        {!isFallbackGroup && !parentTask && !avatar && (
+        {!isFallbackGroup && !parentTask && !avatarUserName && (
           <Avatar className="w-6 h-6 border bg-muted flex items-center justify-center text-[10px] text-muted-foreground ml-1">
             <AvatarFallback>{title[0]}</AvatarFallback>
           </Avatar>
@@ -215,7 +216,10 @@ function SwimlaneGroup({
         )}
       </div>
       {isExpanded && (
-        <div className="flex h-fit max-h-full min-h-0">{children}</div>
+        <div className="flex h-fit max-h-full min-h-0">
+          {children}
+          <div className="w-6 shrink-0" aria-hidden="true" />
+        </div>
       )}
     </div>
   );
@@ -234,6 +238,7 @@ export function KanbanBoard({
   headerSlot,
 }: KanbanBoardProps) {
   const { data: serverTaskData, isLoading } = useTasksByProject(projectId);
+  const { users } = useUsers();
   const { data: columns = [] } = useProjectColumns(projectId);
   const createColumn = useCreateColumn(projectId);
   const updateColumn = useUpdateColumn(projectId);
@@ -309,24 +314,37 @@ export function KanbanBoard({
     const edgeSize = 128;
     const scrollSpeed = 12;
     let latestClientX: number | null = null;
+    let latestClientY: number | null = null;
     let animationFrameId = 0;
 
     const tick = () => {
       const scrollContainer = scrollContainerRef.current;
-      if (scrollContainer && latestClientX !== null) {
+      if (scrollContainer && latestClientX !== null && latestClientY !== null) {
         const rect = scrollContainer.getBoundingClientRect();
         const leftDistance = latestClientX - rect.left;
         const rightDistance = rect.right - latestClientX;
-        let scrollDelta = 0;
+        const topDistance = latestClientY - rect.top;
+        const bottomDistance = rect.bottom - latestClientY;
+        let horizontalDelta = 0;
+        let verticalDelta = 0;
 
         if (leftDistance < edgeSize) {
-          scrollDelta = -scrollSpeed;
+          horizontalDelta = -scrollSpeed;
         } else if (rightDistance < edgeSize) {
-          scrollDelta = scrollSpeed;
+          horizontalDelta = scrollSpeed;
         }
 
-        if (scrollDelta !== 0) {
-          scrollContainer.scrollLeft += scrollDelta;
+        if (topDistance < edgeSize) {
+          verticalDelta = -scrollSpeed;
+        } else if (bottomDistance < edgeSize) {
+          verticalDelta = scrollSpeed;
+        }
+
+        if (horizontalDelta !== 0) {
+          scrollContainer.scrollLeft += horizontalDelta;
+        }
+        if (verticalDelta !== 0) {
+          scrollContainer.scrollTop += verticalDelta;
         }
       }
 
@@ -335,6 +353,7 @@ export function KanbanBoard({
 
     const handleTaskDragOver = (event: DragEvent) => {
       latestClientX = event.clientX;
+      latestClientY = event.clientY;
     };
 
     window.addEventListener("dragover", handleTaskDragOver);
@@ -471,7 +490,7 @@ export function KanbanBoard({
         if (groupBy === "Assignee") {
           newActiveTask.assigneeId = overTask.assigneeId;
           if (overTask.assigneeId) {
-            const newUser = mockUsers.find(
+            const newUser = users.find(
               (user) => user.id === overTask.assigneeId,
             );
             newActiveTask.assignee = newUser
@@ -538,9 +557,7 @@ export function KanbanBoard({
             overGroupId === "ungrouped" ? undefined : overGroupId;
           newActiveTask.assigneeId = targetAssigneeId;
           if (targetAssigneeId) {
-            const newUser = mockUsers.find(
-              (user) => user.id === targetAssigneeId,
-            );
+            const newUser = users.find((user) => user.id === targetAssigneeId);
             newActiveTask.assignee = newUser
               ? {
                   id: newUser.id,
@@ -595,7 +612,7 @@ export function KanbanBoard({
 
       return sourceTasks;
     },
-    [groupBy],
+    [groupBy, users],
   );
 
   const persistDroppedTask = useCallback(
@@ -985,15 +1002,15 @@ export function KanbanBoard({
     return (
       <div className="flex flex-col h-full overflow-hidden pt-0">
         {headerSlot}
-        <div className="flex flex-col flex-1 overflow-auto px-6 pt-4 md:px-8 pb-4 items-start">
+        <div className="flex flex-col flex-1 overflow-auto px-6 pt-0 pb-4 items-start">
           <div className="flex gap-4 h-fit max-h-full min-h-0 animate-pulse">
             {[1, 2, 3, 4].map((i) => (
               <div
                 key={i}
-                className="flex flex-col rounded-xl border bg-muted/50 min-w-70 w-70 h-[350px]"
+                className="flex flex-col rounded-xl border border-neutral-300 bg-neutral-100 dark:border-border dark:bg-muted/50 min-w-70 w-70 h-[350px]"
               />
             ))}
-            <div className="w-1 shrink-0" />
+            <div className="w-6 shrink-0" />
           </div>
         </div>
       </div>
@@ -1003,7 +1020,7 @@ export function KanbanBoard({
     <div className="flex flex-col h-full overflow-hidden pt-0">
       {headerSlot}
       <div
-        className="flex flex-col flex-1 min-h-0 overflow-x-auto overflow-y-auto px-6 pt-4 pb-6 md:px-8 md:pb-8 items-start relative custom-scrollbar"
+        className="flex flex-col flex-1 min-h-0 overflow-x-auto overflow-y-auto px-6 pt-0 pb-6 items-start relative custom-scrollbar"
         ref={scrollContainerRef}
       >
         {groupBy !== "None" ? (
@@ -1050,12 +1067,12 @@ export function KanbanBoard({
                 <>
                   {Array.from(grouped.entries()).map(([groupId, tasks]) => {
                     if (groupBy === "Assignee") {
-                      const user = mockUsers.find((u) => u.id === groupId);
+                      const user = users.find((u) => u.id === groupId);
                       return (
                         <SwimlaneGroup
                           key={groupId}
                           title={user?.name || groupId}
-                          avatar={user?.avatarUrl}
+                          avatarUserName={user?.name}
                           taskCount={tasks.length}
                         >
                           {columns.map((col, index) => {
@@ -1189,7 +1206,7 @@ export function KanbanBoard({
                 />
               );
             })}
-            <div className="w-70 shrink-0 pr-6">
+            <div className="w-70 shrink-0">
               {isAddingColumn ? (
                 <input
                   autoFocus

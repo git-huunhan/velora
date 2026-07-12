@@ -32,6 +32,7 @@ interface TaskHeaderProps {
   handleUpdate?: TaskFieldUpdater;
   /** When true, renders its own Close and Expand buttons (for split-view, outside a Dialog) */
   showCloseButton?: boolean;
+  isEmbedded?: boolean;
 }
 
 export function TaskHeader({
@@ -41,13 +42,16 @@ export function TaskHeader({
   onOpenTask,
   handleUpdate,
   showCloseButton,
+  isEmbedded,
 }: TaskHeaderProps) {
   const { data: tasks = [] } = useTasksByProject(task.projectId);
   const epics = tasks.filter((t) => t.type === "epic");
   const directParent = getTaskParent(task, tasks);
   const taskIsSubtask = isSubtask(task, tasks);
   return (
-    <div className="flex items-center justify-between px-6 py-4 shrink-0 border-b border-border/40 bg-card z-20">
+    <div
+      className={`flex items-center justify-between shrink-0 border-b border-border/40 bg-card z-20 ${isEmbedded ? "min-h-[65px] pl-6 pr-6 py-4" : "px-6 py-4"}`}
+    >
       <div className="flex items-center gap-2.5 text-sm text-muted-foreground font-medium">
         {task.type !== "epic" && (
           <>

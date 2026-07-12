@@ -36,6 +36,7 @@ import {
 
 import { useTasksByProject } from "../../model/useTasks";
 import { FilterCategoryOptions } from "./FilterCategoryOptions";
+import type { User } from "@/features/users";
 
 export type FilterCategory =
   | "Parent"
@@ -62,6 +63,7 @@ interface AdvancedFilterPopoverProps {
   setWorkTypes: (val: string[]) => void;
   labels: string[];
   setLabels: (val: string[]) => void;
+  users: User[];
 }
 
 function SortableCategoryItem({
@@ -117,11 +119,11 @@ function SortableCategoryItem({
               e.stopPropagation();
               onTogglePin();
             }}
-            className={`h-7 w-7 flex items-center justify-center transition-colors rounded-sm cursor-pointer ${isPinned ? "text-primary hover:bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted-foreground/20"}`}
+            className={`h-7 w-7 flex items-center justify-center transition-colors rounded-sm cursor-pointer ${isPinned ? "text-primary hover:bg-primary/10" : "text-muted-foreground hover:text-foreground hover:border-border hover:bg-muted-foreground/20"}`}
           >
             <Pin className={`w-3.5 h-3.5 ${isPinned ? "fill-primary" : ""}`} />
           </div>
-          <div className="h-7 w-7 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground hover:bg-muted-foreground/20 rounded-sm cursor-pointer">
+          <div className="h-7 w-7 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground hover:border-border hover:bg-muted-foreground/20 rounded-sm cursor-pointer">
             <MoreHorizontal className="w-3.5 h-3.5" />
           </div>
         </div>
@@ -147,6 +149,7 @@ export function AdvancedFilterPopover({
   setWorkTypes,
   labels,
   setLabels,
+  users,
 }: AdvancedFilterPopoverProps) {
   const { id } = useParams<{ id: string }>();
   const { data: tasks = [] } = useTasksByProject(id || "");
@@ -278,7 +281,7 @@ export function AdvancedFilterPopover({
       case "Parent":
         return parentTasks.length + 1; // + No parent
       case "Assignee":
-        return 5 + 1; // mockUsers.length + Unassigned, but we don't have mockUsers here, just hardcoded 6 for now or omit it
+        return users.length + 1; // + Unassigned
       case "Status":
         return 4;
       case "Priority":
@@ -301,7 +304,7 @@ export function AdvancedFilterPopover({
           className={`h-8 gap-1.5 transition-colors aria-expanded:bg-primary/10 aria-expanded:text-primary aria-expanded:!border-primary aria-expanded:hover:bg-primary/20 aria-expanded:hover:text-primary ${
             activeFilterCount > 0
               ? "bg-primary/10 text-primary !border-primary hover:bg-primary/20 hover:text-primary"
-              : "bg-transparent border-muted text-muted-foreground hover:text-foreground hover:border-muted-foreground"
+              : "bg-transparent border-input text-muted-foreground hover:text-foreground hover:border-border"
           }`}
         >
           <ListFilter className="w-4 h-4 opacity-70" />
@@ -422,6 +425,7 @@ export function AdvancedFilterPopover({
                 setWorkTypes={setWorkTypes}
                 labels={labels}
                 setLabels={setLabels}
+                users={users}
               />
             </div>
 

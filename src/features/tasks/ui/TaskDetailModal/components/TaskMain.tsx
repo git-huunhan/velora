@@ -51,7 +51,8 @@ import {
   useUpdateTask,
 } from "../../../model/useTasks";
 import { useLogActivity } from "../../../model/useComments";
-import { mockUsers } from "@/features/users/model/mockUsers";
+import { useProject } from "@/features/projects";
+import { useUsers } from "@/features/users";
 import { PriorityIcon } from "../../PriorityIcon";
 import { TaskStatusSelect } from "../../shared/TaskStatusSelect";
 import { isSubtask } from "../../../model/taskHierarchy";
@@ -72,6 +73,13 @@ export function TaskMain({
   columns,
 }: TaskMainProps) {
   const { data: tasks = [] } = useTasksByProject(task.projectId);
+  const { data: project } = useProject(task.projectId);
+  const { users } = useUsers();
+  const projectMemberIdSet = new Set(project?.memberIds ?? []);
+  const selectableUsers =
+    projectMemberIdSet.size > 0
+      ? users.filter((user) => projectMemberIdSet.has(user.id))
+      : users;
   const { mutate: updateTask } = useUpdateTask();
   const { mutate: logActivity } = useLogActivity(task.id);
   const isEpic = task.type === "epic";
@@ -748,7 +756,7 @@ export function TaskMain({
                                       </div>
                                       Unassigned
                                     </CommandItem>
-                                    {mockUsers.map((user) => (
+                                    {selectableUsers.map((user) => (
                                       <CommandItem
                                         key={user.id}
                                         onSelect={() => {

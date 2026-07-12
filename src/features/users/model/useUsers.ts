@@ -18,6 +18,7 @@ export function useUsers() {
   useEffect(() => {
     getUsers()
       .then(setUsers)
+      .catch(() => setError("Failed to load users"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -33,6 +34,7 @@ export function useUsers() {
       setUsers((prev) => [...prev, newUser]);
     } catch {
       setError("Failed to create user");
+      throw new Error("Failed to create user");
     } finally {
       setIsSubmitting(false);
     }
@@ -50,6 +52,7 @@ export function useUsers() {
       );
     } catch {
       setError("Failed to update user");
+      throw new Error("Failed to update user");
     } finally {
       setIsSubmitting(false);
     }
@@ -65,6 +68,7 @@ export function useUsers() {
       setUsers((prev) => prev.filter((user) => user.id !== id));
     } catch {
       setError("Failed to delete user");
+      throw new Error("Failed to delete user");
     } finally {
       setIsSubmitting(false);
     }

@@ -15,8 +15,15 @@ import {
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 
-import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Popover,
   PopoverContent,
@@ -24,6 +31,10 @@ import {
   PopoverClose,
 } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  getUserAvatarUrl,
+  getUserInitials,
+} from "@/features/auth/model/userAvatar";
 import { useProject, useUpdateProject } from "@/features/projects";
 import { BoardToolbar, KanbanBoard, ListView } from "@/features/tasks";
 import {
@@ -33,6 +44,9 @@ import {
 import { ProjectActionsMenu } from "./ProjectActionsMenu";
 
 type GroupBy = "None" | "Assignee" | "Epic" | "Subtask";
+
+const projectTabTriggerClass =
+  "relative -mb-px !h-9 !flex-none gap-2 !rounded-b-none rounded-t-md border border-transparent border-b-transparent px-3 text-muted-foreground transition-colors hover:bg-muted/30 hover:text-foreground data-[state=active]:z-10 data-[state=active]:border-border data-[state=active]:border-b-background data-[state=active]:bg-background data-[state=active]:!text-primary data-[state=active]:[&_svg]:!text-primary data-active:!text-primary data-active:[&_svg]:!text-primary dark:data-[state=active]:border-border/70 dark:data-[state=active]:border-b-background";
 
 function useFilters() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -65,6 +79,7 @@ function useFilters() {
 }
 
 export default function ProjectDetailPage() {
+  const [isMembersOpen, setIsMembersOpen] = useState(false);
   const { id } = useParams<{ id: string }>();
   const { data: project, isLoading, isError } = useProject(id || "");
   const updateProject = useUpdateProject();
@@ -77,6 +92,12 @@ export default function ProjectDetailPage() {
   const currentFilters = activeTab === "list" ? listFilters : boardFilters;
 
   const [listLayout, setListLayout] = useState<"table" | "split">("table");
+
+  const roleOrder = { owner: 0, admin: 1, member: 2, viewer: 3 } as const;
+  const sortedProjectMembers = [...(project?.members ?? [])].sort(
+    (a, b) =>
+      roleOrder[a.role] - roleOrder[b.role] || a.name.localeCompare(b.name),
+  );
 
   if (isLoading)
     return (
@@ -91,7 +112,7 @@ export default function ProjectDetailPage() {
 
   const toolbarNode =
     activeTab === "board" || activeTab === "list" ? (
-      <div className="px-6 py-2 border-b border-border bg-background shrink-0">
+      <div className="px-6 py-2 bg-background shrink-0">
         <div className="overflow-hidden w-full flex-1">
           <BoardToolbar
             searchQuery={currentFilters.searchQuery}
@@ -114,6 +135,7 @@ export default function ProjectDetailPage() {
             setGroupBy={currentFilters.setGroupBy}
             listLayout={listLayout}
             onListLayoutChange={setListLayout}
+            projectMemberIds={project.memberIds}
           />
         </div>
       </div>
@@ -125,14 +147,14 @@ export default function ProjectDetailPage() {
       onValueChange={setActiveTab}
       className="flex flex-col h-full w-full bg-background overflow-hidden gap-0"
     >
-      <div className="flex flex-col border-b border-border bg-background pt-4 pb-2 px-6 shrink-0 gap-4">
+      <div className="flex flex-col border-b border-border bg-background pt-3 pb-0 px-6 shrink-0 gap-2.5">
         {/* Top: Breadcrumb */}
         <div className="text-sm text-muted-foreground font-medium flex items-center gap-2">
           Spaces
         </div>
 
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <Popover>
               <PopoverTrigger asChild>
                 <button className="relative group p-0 m-0 border-none bg-transparent cursor-pointer focus:outline-none">
@@ -141,9 +163,9 @@ export default function ProjectDetailPage() {
                     const Icon = currentAvatar.icon;
                     return (
                       <div
-                        className={`p-1.5 rounded-md shadow-sm ${currentAvatar.bg} ${currentAvatar.text}`}
+                        className={`flex h-8 w-8 items-center justify-center rounded-md shadow-sm ${currentAvatar.bg} ${currentAvatar.text}`}
                       >
-                        <Icon className="w-7 h-7 group-hover:opacity-10 transition-opacity" />
+                        <Icon className="w-5 h-5 group-hover:opacity-10 transition-opacity" />
                       </div>
                     );
                   })()}
@@ -192,31 +214,69 @@ export default function ProjectDetailPage() {
                 </div>
               </PopoverContent>
             </Popover>
-            <h1 className="text-xl font-bold text-foreground m-0 flex items-center gap-2">
+            <h1 className="text-xl font-bold text-foreground m-0 flex items-center gap-2 leading-none">
               {project.name}
-              <Badge
-                variant="secondary"
-                className="font-normal text-xs px-2 py-0.5 h-6 flex items-center gap-1 bg-muted/50 hover:bg-muted/80 ml-2"
-              >
-                <Users className="w-3 h-3" />
-                22
-              </Badge>
             </h1>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 rounded-md border-input px-2 text-muted-foreground hover:border-border hover:text-foreground"
+              onClick={() => setIsMembersOpen(true)}
+              aria-label="View project members"
+            >
+              <Users className="w-4 h-4" />
+              <span className="text-xs font-medium tabular-nums">
+                {project.memberIds.length}
+              </span>
+            </Button>
             <ProjectActionsMenu project={project} />
+            <Dialog open={isMembersOpen} onOpenChange={setIsMembersOpen}>
+              <DialogContent className="top-[96px] translate-y-0 sm:max-w-sm p-0 gap-0 overflow-hidden">
+                <DialogHeader className="px-4 py-3 border-b text-left">
+                  <DialogTitle className="text-sm">Project members</DialogTitle>
+                  <DialogDescription className="text-xs">
+                    {project.name} has {project.memberIds.length} members.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="max-h-80 overflow-y-auto p-2 custom-scrollbar">
+                  {sortedProjectMembers.map((member) => (
+                    <div
+                      key={member.userId}
+                      className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/50"
+                    >
+                      <Avatar className="h-8 w-8 border border-border/50">
+                        <AvatarImage src={getUserAvatarUrl(member)} />
+                        <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
+                          {getUserInitials(member.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium">
+                          {member.name}
+                        </div>
+                        <div className="text-xs capitalize text-muted-foreground">
+                          {member.role}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
 
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8 text-muted-foreground border-muted rounded-md hover:text-foreground hover:border-muted-foreground transition-colors"
+              className="h-8 w-8 text-muted-foreground border-input rounded-md hover:text-foreground hover:border-border transition-colors"
             >
               <Share2 className="w-4 h-4" />
             </Button>
             <Button
               variant="outline"
               size="icon"
-              className="h-8 w-8 text-muted-foreground border-muted rounded-md hover:text-foreground hover:border-muted-foreground transition-colors"
+              className="h-8 w-8 text-muted-foreground border-input rounded-md hover:text-foreground hover:border-border transition-colors"
             >
               <Maximize2 className="w-4 h-4" />
             </Button>
@@ -224,54 +284,33 @@ export default function ProjectDetailPage() {
         </div>
 
         {/* Row 3: Tabs */}
-        <div className="flex items-center mt-2">
-          <TabsList className="h-9 bg-transparent gap-2 justify-start overflow-x-auto overflow-y-hidden w-full border-b border-transparent [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] px-1 -ml-1 py-1 -my-1">
-            <TabsTrigger
-              value="summary"
-              className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary h-9 flex-none px-2.5 gap-2 text-muted-foreground data-[state=active]:text-foreground font-medium transition-none"
-            >
+        <div className="flex items-end mt-0">
+          <TabsList className="h-9 w-full justify-start gap-0 overflow-x-auto overflow-y-hidden bg-transparent !p-0 !rounded-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <TabsTrigger value="summary" className={projectTabTriggerClass}>
               <Globe className="w-4 h-4" />
               Summary
             </TabsTrigger>
-            <TabsTrigger
-              value="board"
-              className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary h-9 flex-none px-2.5 gap-2 text-muted-foreground data-[state=active]:text-foreground font-medium transition-none"
-            >
+            <TabsTrigger value="board" className={projectTabTriggerClass}>
               <KanbanSquare className="w-4 h-4" />
               Board
             </TabsTrigger>
-            <TabsTrigger
-              value="list"
-              className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary h-9 flex-none px-2.5 gap-2 text-muted-foreground data-[state=active]:text-foreground font-medium transition-none"
-            >
+            <TabsTrigger value="list" className={projectTabTriggerClass}>
               <List className="w-4 h-4" />
               List
             </TabsTrigger>
-            <TabsTrigger
-              value="calendar"
-              className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary h-9 flex-none px-2.5 gap-2 text-muted-foreground data-[state=active]:text-foreground font-medium transition-none"
-            >
+            <TabsTrigger value="calendar" className={projectTabTriggerClass}>
               <Calendar className="w-4 h-4" />
               Calendar
             </TabsTrigger>
-            <TabsTrigger
-              value="timeline"
-              className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary h-9 flex-none px-2.5 gap-2 text-muted-foreground data-[state=active]:text-foreground font-medium transition-none"
-            >
+            <TabsTrigger value="timeline" className={projectTabTriggerClass}>
               <GanttChart className="w-4 h-4" />
               Timeline
             </TabsTrigger>
-            <TabsTrigger
-              value="docs"
-              className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary h-9 flex-none px-2.5 gap-2 text-muted-foreground data-[state=active]:text-foreground font-medium transition-none"
-            >
+            <TabsTrigger value="docs" className={projectTabTriggerClass}>
               <FileText className="w-4 h-4" />
               Docs
             </TabsTrigger>
-            <TabsTrigger
-              value="forms"
-              className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary h-9 flex-none px-2.5 gap-2 text-muted-foreground data-[state=active]:text-foreground font-medium transition-none"
-            >
+            <TabsTrigger value="forms" className={projectTabTriggerClass}>
               <ClipboardList className="w-4 h-4" />
               Forms
             </TabsTrigger>

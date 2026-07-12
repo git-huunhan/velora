@@ -1,7 +1,11 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { mockUsers } from "@/features/users/model/mockUsers";
+import {
+  getUserAvatarUrl,
+  getUserInitials,
+} from "@/features/auth/model/userAvatar";
+import type { User } from "@/features/users";
 import { Bug, ClipboardList, Crown, User as UserIcon } from "lucide-react";
 import type { Task } from "../../model/types";
 import { KANBAN_COLUMNS } from "../../model/types";
@@ -72,6 +76,7 @@ interface FilterCategoryOptionsProps {
   setWorkTypes: (val: string[]) => void;
   labels: string[];
   setLabels: (val: string[]) => void;
+  users: User[];
 }
 
 export function FilterCategoryOptions({
@@ -91,6 +96,7 @@ export function FilterCategoryOptions({
   setWorkTypes,
   labels,
   setLabels,
+  users,
 }: FilterCategoryOptionsProps) {
   const toggleArray = (
     val: string,
@@ -146,10 +152,10 @@ export function FilterCategoryOptions({
   if (activeCategory === "Assignee") {
     const options = [
       { id: "unassigned", name: "Unassigned", avatar: "" },
-      ...mockUsers.map((u) => ({
+      ...users.map((u) => ({
         id: u.id,
         name: u.name,
-        avatar: u.avatarUrl,
+        avatar: getUserAvatarUrl(u),
       })),
     ].filter((o) => o.name.toLowerCase().includes(q));
 
@@ -169,14 +175,18 @@ export function FilterCategoryOptions({
             {opt.avatar ? (
               <Avatar className="w-5 h-5">
                 <AvatarImage src={opt.avatar} />
-                <AvatarFallback>{opt.name.charAt(0)}</AvatarFallback>
+                <AvatarFallback className="text-[10px] bg-primary/10 text-primary font-semibold">
+                  {getUserInitials(opt.name)}
+                </AvatarFallback>
               </Avatar>
             ) : (
               <div className="w-5 h-5 rounded-full border border-dashed border-muted-foreground/40 flex items-center justify-center bg-muted/20 shrink-0">
                 {opt.id === "unassigned" ? (
                   <UserIcon className="w-3 h-3 text-muted-foreground/60" />
                 ) : (
-                  <span className="text-[10px]">{opt.name.charAt(0)}</span>
+                  <span className="text-[10px] font-semibold text-primary">
+                    {getUserInitials(opt.name)}
+                  </span>
                 )}
               </div>
             )}

@@ -241,9 +241,10 @@ export function BoardColumn({
         }
 
         const deepest = dropTargets[0];
+        const currentDroppableId = droppableId || columnId;
         const isThisColumnDeepest =
           deepest?.data?.entityType === "task-column" &&
-          deepest?.data?.column === columnId;
+          deepest?.data?.droppableId === currentDroppableId;
         const indicatorY = deepest?.data?.indicatorY;
         setColumnDropIndicatorY(
           isThisColumnDeepest && typeof indicatorY === "number"
@@ -255,7 +256,7 @@ export function BoardColumn({
         setColumnDropIndicatorY(null);
       },
     });
-  }, [columnId]);
+  }, [columnId, droppableId]);
 
   const [isCreating, setIsCreating] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -274,7 +275,7 @@ export function BoardColumn({
   return (
     <div
       ref={columnRef}
-      className="group/column relative flex flex-col rounded-xl border bg-muted/50 min-w-70 w-70 shrink-0 mr-6 last:mr-0 pb-2"
+      className="group/column relative flex flex-col rounded-xl border border-neutral-300 bg-neutral-100 dark:border-border dark:bg-muted/50 min-w-70 w-70 shrink-0 mr-6 last:mr-0 pb-2"
     >
       {isFirstColumn && (
         <div

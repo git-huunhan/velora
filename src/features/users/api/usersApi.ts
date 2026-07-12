@@ -1,50 +1,56 @@
 import type { CreateUserDto, User } from "@/features/users";
 
-import { mockUsers } from "@/features/users/model/mockUsers";
+import { apiRequest } from "@/shared/api/client";
 
-let usersDb = [...mockUsers];
+interface ApiUser {
+  avatarUrl: string | null;
+  email: string;
+  id: string;
+  name: string;
+}
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+interface ApiUserListResponse {
+  data: ApiUser[];
+}
+
+function mapUser(user: ApiUser): User {
+  return {
+    avatarUrl: user.avatarUrl ?? undefined,
+    email: user.email,
+    id: user.id,
+    name: user.name,
+    role: user.email === "admin@velora.local" ? "admin" : "user",
+  };
+}
 
 export async function getUsers(): Promise<User[]> {
-  await delay(500);
+  const params = new URLSearchParams({
+    limit: "100",
+    page: "1",
+    sort: "name:asc",
+  });
+  const response = await apiRequest<ApiUserListResponse>(
+    `/users?${params.toString()}`,
+  );
 
-  return usersDb.map((user) => ({ ...user }));
+  return response.data.map(mapUser);
 }
 
 export async function createUser(data: CreateUserDto): Promise<User> {
-  await delay(500);
-
-  const newUser: User = {
-    id: crypto.randomUUID(),
-    ...data,
-  };
-
-  usersDb.push(newUser);
-
-  return { ...newUser };
+  void data;
+  throw new Error("User creation is not available from the API yet.");
 }
 
 export async function updateUser(
   id: string,
   data: CreateUserDto,
 ): Promise<User> {
-  await delay(500);
-
-  const index = usersDb.findIndex((user) => user.id === id);
-
-  const updatedUser = {
-    ...usersDb[index],
-    ...data,
-  };
-
-  usersDb[index] = updatedUser;
-
-  return { ...updatedUser };
+  void id;
+  void data;
+  throw new Error("User updates are not available from the API yet.");
 }
 
 export async function deleteUser(id: string): Promise<void> {
-  await delay(500);
-
-  usersDb = usersDb.filter((user) => user.id !== id);
+  void id;
+  throw new Error("User deletion is not available from the API yet.");
 }

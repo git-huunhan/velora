@@ -43,15 +43,20 @@ export default function UsersPage() {
   };
 
   const handleSubmitUser = async (data: CreateUserDto) => {
-    if (selectedUser) {
-      await updateUserById(selectedUser.id, data);
-      toast.success("User updated successfully");
-    } else {
-      await addUser(data);
-      toast.success("User created successfully");
-    }
+    try {
+      if (selectedUser) {
+        await updateUserById(selectedUser.id, data);
+        toast.success("User updated successfully");
+      } else {
+        await addUser(data);
+        toast.success("User created successfully");
+      }
 
-    setSelectedUser(null);
+      setSelectedUser(null);
+      setIsModalOpen(false);
+    } catch {
+      toast.error("User management API is not available yet");
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -59,8 +64,12 @@ export default function UsersPage() {
 
     if (!confirmed) return;
 
-    await deleteUserById(id);
-    toast.success("User deleted");
+    try {
+      await deleteUserById(id);
+      toast.success("User deleted");
+    } catch {
+      toast.error("User management API is not available yet");
+    }
   };
 
   if (loading) {

@@ -48,7 +48,7 @@ export function ViewSettingsPopover({
         <Button
           variant="outline"
           size="icon"
-          className="h-8 w-8 rounded-md transition-colors text-muted-foreground border-muted hover:text-foreground hover:border-muted-foreground aria-expanded:bg-primary/10 aria-expanded:text-primary aria-expanded:!border-primary aria-expanded:hover:bg-primary/20 aria-expanded:hover:text-primary"
+          className="h-8 w-8 rounded-md transition-colors text-muted-foreground border-input hover:text-foreground hover:border-border aria-expanded:bg-primary/10 aria-expanded:text-primary aria-expanded:!border-primary aria-expanded:hover:bg-primary/20 aria-expanded:hover:text-primary"
         >
           <SlidersHorizontal className="w-4 h-4" />
         </Button>

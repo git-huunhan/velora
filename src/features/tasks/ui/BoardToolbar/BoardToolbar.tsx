@@ -17,7 +17,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { mockUsers } from "@/features/users/model/mockUsers";
+import {
+  getUserAvatarUrl,
+  getUserInitials,
+} from "@/features/auth/model/userAvatar";
+import { useUsers } from "@/features/users";
 import { useState } from "react";
 import type { FilterCategory } from "./AdvancedFilterPopover";
 import { AdvancedFilterPopover } from "./AdvancedFilterPopover";
@@ -45,6 +49,7 @@ interface BoardToolbarProps {
   setGroupBy: (val: "None" | "Assignee" | "Epic" | "Subtask") => void;
   listLayout?: "table" | "split";
   onListLayoutChange?: (val: "table" | "split") => void;
+  projectMemberIds?: string[];
 }
 
 export function BoardToolbar({
@@ -67,7 +72,14 @@ export function BoardToolbar({
   setGroupBy,
   listLayout = "table",
   onListLayoutChange,
+  projectMemberIds = [],
 }: BoardToolbarProps) {
+  const { users } = useUsers();
+  const projectMemberIdSet = new Set(projectMemberIds);
+  const selectableUsers =
+    projectMemberIdSet.size > 0
+      ? users.filter((user) => projectMemberIdSet.has(user.id))
+      : users;
   const [categoriesOrder, setCategoriesOrder] = useState<FilterCategory[]>([
     "Parent",
     "Assignee",
@@ -116,7 +128,7 @@ export function BoardToolbar({
             placeholder="Search tasks..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-48 pl-8 h-8 bg-transparent text-sm border-muted hover:border-muted-foreground focus-visible:ring-1 focus-visible:ring-primary/30 transition-colors"
+            className="w-48 pl-8 h-8 bg-transparent text-sm border-input hover:border-border focus-visible:ring-1 focus-visible:ring-primary/30 transition-colors"
           />
         </div>
 
@@ -128,13 +140,13 @@ export function BoardToolbar({
             className={`h-8 w-8 rounded-full border-2 cursor-pointer hover:-translate-y-0.5 transition-all flex items-center justify-center shrink-0 hover:z-10 ${
               assigneeIds.includes("unassigned")
                 ? "border-background ring-2 ring-primary bg-muted/50 z-10"
-                : "border-dashed border-muted-foreground/40 bg-muted/20"
+                : "border-dashed border-border/40 bg-muted/20"
             }`}
             onClick={() => toggleAssignee("unassigned")}
           >
             <UserIcon className="w-4 h-4 text-muted-foreground/80" />
           </div>
-          {mockUsers.slice(0, 5).map((user) => {
+          {selectableUsers.slice(0, 5).map((user) => {
             const isActive = assigneeIds.includes(user.id);
             return (
               <Avatar
@@ -145,9 +157,9 @@ export function BoardToolbar({
                 onClick={() => toggleAssignee(user.id)}
                 title={user.name}
               >
-                <AvatarImage src={user.avatarUrl} />
-                <AvatarFallback className="text-xs">
-                  {user.name.charAt(0)}
+                <AvatarImage src={getUserAvatarUrl(user)} />
+                <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
+                  {getUserInitials(user.name)}
                 </AvatarFallback>
               </Avatar>
             );
@@ -172,6 +184,7 @@ export function BoardToolbar({
           setWorkTypes={setWorkTypes}
           labels={labels}
           setLabels={setLabels}
+          users={selectableUsers}
         />
 
         {/* Group By (List View only) */}
@@ -184,7 +197,7 @@ export function BoardToolbar({
                 className={`h-8 gap-1.5 transition-colors aria-expanded:bg-primary/10 aria-expanded:text-primary aria-expanded:!border-primary aria-expanded:hover:bg-primary/20 aria-expanded:hover:text-primary ${
                   groupBy !== "None"
                     ? "bg-primary/10 text-primary !border-primary hover:bg-primary/20 hover:text-primary"
-                    : "bg-transparent border-muted text-muted-foreground hover:text-foreground hover:border-muted-foreground"
+                    : "bg-transparent border-input text-muted-foreground hover:text-foreground hover:border-border"
                 }`}
               >
                 <Layers className="w-4 h-4 opacity-70" />
@@ -231,7 +244,7 @@ export function BoardToolbar({
                   className={`h-8 gap-1.5 transition-colors aria-expanded:bg-primary/10 aria-expanded:text-primary aria-expanded:!border-primary aria-expanded:hover:bg-primary/20 aria-expanded:hover:text-primary ${
                     groupBy !== "None"
                       ? "bg-primary/10 text-primary !border-primary hover:bg-primary/20 hover:text-primary"
-                      : "bg-transparent border-muted text-muted-foreground hover:text-foreground hover:border-muted-foreground"
+                      : "bg-transparent border-input text-muted-foreground hover:text-foreground hover:border-border"
                   }`}
                 >
                   Group{groupBy !== "None" && `: ${groupBy}`}
@@ -264,7 +277,7 @@ export function BoardToolbar({
               className={`h-8 w-8 rounded-r-none ${
                 listLayout === "table"
                   ? "bg-primary/10 text-primary !border-primary hover:bg-primary/20 hover:text-primary z-10"
-                  : "bg-transparent border-muted text-muted-foreground hover:text-foreground hover:bg-muted z-0"
+                  : "bg-transparent border-input text-muted-foreground hover:text-foreground hover:border-border hover:bg-muted z-0"
               }`}
               onClick={() => onListLayoutChange?.("table")}
             >
@@ -276,7 +289,7 @@ export function BoardToolbar({
               className={`h-8 w-8 rounded-l-none ${
                 listLayout === "split"
                   ? "bg-primary/10 text-primary !border-primary hover:bg-primary/20 hover:text-primary z-10"
-                  : "bg-transparent border-muted text-muted-foreground hover:text-foreground hover:bg-muted z-0"
+                  : "bg-transparent border-input text-muted-foreground hover:text-foreground hover:border-border hover:bg-muted z-0"
               }`}
               onClick={() => onListLayoutChange?.("split")}
             >
@@ -288,7 +301,7 @@ export function BoardToolbar({
         <Button
           variant="outline"
           size="icon"
-          className="h-8 w-8 text-muted-foreground border-muted rounded-md hover:text-foreground hover:border-muted-foreground"
+          className="h-8 w-8 text-muted-foreground border-input rounded-md hover:text-foreground hover:border-border"
         >
           <MoreHorizontal className="w-4 h-4" />
         </Button>

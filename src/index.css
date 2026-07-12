@@ -49,26 +49,26 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --background: oklch(0.985 0 0);
+  --foreground: oklch(0.205 0 0);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.205 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.205 0 0);
   /* Emerald #10b981 */
   --primary: oklch(0.696 0.17 162);
   --primary-foreground: oklch(0.985 0 0);
   /* Teal #0d9488 - slightly cooler, secondary */
   --secondary: oklch(0.92 0.05 162);
   --secondary-foreground: oklch(0.27 0.07 162);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  --muted: oklch(0.94 0 0);
+  --muted-foreground: oklch(0.36 0 0);
   /* Emerald light tint for hover/active */
-  --accent: oklch(0.94 0.05 162);
+  --accent: oklch(0.925 0.055 162);
   --accent-foreground: oklch(0.27 0.07 162);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
+  --border: oklch(0.82 0 0);
+  --input: oklch(0.68 0 0);
   /* Emerald focus ring */
   --ring: oklch(0.696 0.17 162);
   --chart-1: oklch(0.87 0 0);
@@ -77,13 +77,13 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar: oklch(0.97 0 0);
+  --sidebar-foreground: oklch(0.205 0 0);
   --sidebar-primary: oklch(0.696 0.17 162);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.94 0.05 162);
+  --sidebar-accent: oklch(0.925 0.055 162);
   --sidebar-accent-foreground: oklch(0.27 0.07 162);
-  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-border: oklch(0.82 0 0);
   --sidebar-ring: oklch(0.696 0.17 162);
 }
 
@@ -208,4 +208,20 @@
 .bulk-edit-separator:active > *,
 [data-panel-resize-handle-enabled].bulk-edit-separator:active > * {
   background-color: hsl(var(--primary)) !important;
+}
+
+:root:not(.dark) [data-slot="button"][data-variant="outline"],
+:root:not(.dark) [data-slot="select-trigger"],
+:root:not(.dark) [data-slot="input"],
+:root:not(.dark) [data-slot="textarea"],
+:root:not(.dark) [data-slot="input-group"] {
+  border-color: oklch(0.68 0 0);
+  background-color: var(--card);
+}
+
+:root:not(.dark) [data-slot="button"][data-variant="outline"]:hover,
+:root:not(.dark)
+  [data-slot="button"][data-variant="outline"][aria-expanded="true"] {
+  border-color: oklch(0.64 0 0);
+  background-color: var(--muted);
 }

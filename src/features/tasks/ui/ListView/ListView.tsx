@@ -1135,107 +1135,111 @@ export function ListView({
       {layout === "split" ? (
         <>
           {headerSlot}
-          <div className="flex flex-1 overflow-hidden">
+          <div className="flex flex-1 overflow-hidden pt-0">
             {/* Left Sidebar List */}
-            <div className="w-[300px] flex-shrink-0 border-r border-border bg-background flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between p-3 border-b border-border bg-muted/10">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors -ml-2"
-                    >
-                      Custom field{" "}
-                      <ChevronDown className="w-3.5 h-3.5 ml-1 opacity-70" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-48">
-                    <DropdownMenuItem>Custom field</DropdownMenuItem>
-                    <DropdownMenuItem>Issue Type</DropdownMenuItem>
-                    <DropdownMenuItem>Status</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                <div className="flex items-center gap-0.5">
+            <div className="w-[324px] flex-shrink-0 bg-background pl-6">
+              <div
+                className={`h-full w-[300px] border-x border-t border-border bg-background flex flex-col overflow-hidden ${selectedTask ? "rounded-tl-md" : "rounded-t-md"}`}
+              >
+                <div className="flex h-[65px] items-center justify-between p-3 border-b border-border/40 bg-card">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="ghost"
-                        size="icon"
-                        className="w-7 h-7 hover:bg-muted text-muted-foreground transition-colors"
-                        title="Order work items by"
+                        size="sm"
+                        className="h-7 px-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
                       >
-                        <ArrowDownWideNarrow className="w-3.5 h-3.5" />
+                        Custom field{" "}
+                        <ChevronDown className="w-3.5 h-3.5 ml-1 opacity-70" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
-                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                        Order work items by
-                      </div>
-                      <DropdownMenuItem>Created</DropdownMenuItem>
-                      <DropdownMenuItem>Key</DropdownMenuItem>
-                      <DropdownMenuItem>Last viewed</DropdownMenuItem>
-                      <DropdownMenuItem>Priority</DropdownMenuItem>
-                      <DropdownMenuItem>Resolved</DropdownMenuItem>
+                    <DropdownMenuContent align="start" className="w-48">
+                      <DropdownMenuItem>Custom field</DropdownMenuItem>
+                      <DropdownMenuItem>Issue Type</DropdownMenuItem>
                       <DropdownMenuItem>Status</DropdownMenuItem>
-                      <DropdownMenuItem>Updated</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
 
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="w-7 h-7 hover:bg-muted text-muted-foreground transition-colors"
-                    title="Refresh"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              </div>
-              <div className="flex-1 overflow-y-auto overflow-x-hidden">
-                {filteredTasks.map((task) => {
-                  const assignee = getUser(task.assigneeId);
-                  const isSelected = selectedTaskId === task.id;
-
-                  return (
-                    <div
-                      key={task.id}
-                      onClick={() => setSelectedTaskId(task.id)}
-                      className={`flex flex-col gap-1 p-3 cursor-pointer border-l-2 transition-colors ${
-                        isSelected
-                          ? "border-primary bg-primary/5"
-                          : "border-transparent hover:bg-muted/30"
-                      }`}
-                    >
-                      <div
-                        className={`font-medium truncate ${isSelected ? "text-primary" : "text-foreground"}`}
-                      >
-                        {task.title}
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          {getTypeIcon(task)}
-                          <span className="text-xs font-medium text-muted-foreground hover:underline">
-                            {task.code}
-                          </span>
+                  <div className="flex items-center gap-0.5">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-7 h-7 hover:bg-muted text-muted-foreground transition-colors"
+                          title="Order work items by"
+                        >
+                          <ArrowDownWideNarrow className="w-3.5 h-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                          Order work items by
                         </div>
-                        {assignee ? (
-                          <Avatar className="w-5 h-5">
-                            <AvatarImage src={assignee.avatarUrl} />
-                            <AvatarFallback className="text-[9px]">
-                              {assignee.name.charAt(0)}
-                            </AvatarFallback>
-                          </Avatar>
-                        ) : (
-                          <div className="w-5 h-5 rounded-full border border-dashed border-muted-foreground/40 flex items-center justify-center bg-muted/20">
-                            <User className="w-3.5 h-3.5 text-muted-foreground/60" />
+                        <DropdownMenuItem>Created</DropdownMenuItem>
+                        <DropdownMenuItem>Key</DropdownMenuItem>
+                        <DropdownMenuItem>Last viewed</DropdownMenuItem>
+                        <DropdownMenuItem>Priority</DropdownMenuItem>
+                        <DropdownMenuItem>Resolved</DropdownMenuItem>
+                        <DropdownMenuItem>Status</DropdownMenuItem>
+                        <DropdownMenuItem>Updated</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="w-7 h-7 hover:bg-muted text-muted-foreground transition-colors"
+                      title="Refresh"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto overflow-x-hidden">
+                  {filteredTasks.map((task) => {
+                    const assignee = getUser(task.assigneeId);
+                    const isSelected = selectedTaskId === task.id;
+
+                    return (
+                      <div
+                        key={task.id}
+                        onClick={() => setSelectedTaskId(task.id)}
+                        className={`flex flex-col gap-1 p-3 cursor-pointer border-l-2 transition-colors ${
+                          isSelected
+                            ? "border-primary bg-primary/5"
+                            : "border-transparent hover:bg-muted/30"
+                        }`}
+                      >
+                        <div
+                          className={`font-medium truncate ${isSelected ? "text-primary" : "text-foreground"}`}
+                        >
+                          {task.title}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            {getTypeIcon(task)}
+                            <span className="text-xs font-medium text-muted-foreground hover:underline">
+                              {task.code}
+                            </span>
                           </div>
-                        )}
+                          {assignee ? (
+                            <Avatar className="w-5 h-5">
+                              <AvatarImage src={assignee.avatarUrl} />
+                              <AvatarFallback className="text-[9px]">
+                                {assignee.name.charAt(0)}
+                              </AvatarFallback>
+                            </Avatar>
+                          ) : (
+                            <div className="w-5 h-5 rounded-full border border-dashed border-muted-foreground/40 flex items-center justify-center bg-muted/20">
+                              <User className="w-3.5 h-3.5 text-muted-foreground/60" />
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
@@ -1247,6 +1251,7 @@ export function ListView({
                     task={selectedTask}
                     onClose={() => setSelectedTaskId(null)}
                     columns={columns}
+                    isEmbedded
                   />
                 </div>
               ) : (
@@ -1269,7 +1274,7 @@ export function ListView({
             }}
           >
             {headerSlot}
-            <div className="flex-1 flex flex-col overflow-hidden px-6 pb-6 pt-4">
+            <div className="flex-1 flex flex-col overflow-hidden px-6 pb-6 pt-0">
               <div className="border border-border rounded-lg bg-background flex flex-col min-h-0 overflow-hidden">
                 <div
                   ref={containerRef}

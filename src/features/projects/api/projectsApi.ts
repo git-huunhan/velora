@@ -1,6 +1,12 @@
 import { apiRequest } from "@/shared/api/client";
 
-import type { PaginatedProjects, Project, ProjectStatus } from "../model/types";
+import type {
+  PaginatedProjects,
+  Project,
+  ProjectMember,
+  ProjectMemberRole,
+  ProjectStatus,
+} from "../model/types";
 import type { ProjectFormData } from "../ui/ProjectForm/ProjectForm";
 
 interface ApiProject {
@@ -27,12 +33,17 @@ interface ApiProjectList {
   };
 }
 
+interface ApiProjectMember {
+  role: ProjectMemberRole;
+  user: {
+    avatarUrl: string | null;
+    id: string;
+    name: string;
+  };
+}
+
 interface ApiProjectMemberList {
-  data: Array<{
-    user: {
-      id: string;
-    };
-  }>;
+  data: ApiProjectMember[];
 }
 
 type ProjectMutationData = Partial<Omit<Project, "id" | "createdAt">>;
@@ -53,7 +64,19 @@ function dateOnly(value?: string | null) {
   return value ? value.slice(0, 10) : "";
 }
 
-function toProject(apiProject: ApiProject, memberIds: string[] = []): Project {
+function toProjectMember(member: ApiProjectMember): ProjectMember {
+  return {
+    avatarUrl: member.user.avatarUrl ?? undefined,
+    name: member.user.name,
+    role: member.role,
+    userId: member.user.id,
+  };
+}
+
+function toProject(
+  apiProject: ApiProject,
+  members: ProjectMember[] = [],
+): Project {
   const project: Project = {
     archivedAt: apiProject.archivedAt ?? undefined,
     avatar: avatarUrlToId(apiProject.avatarUrl),
@@ -61,7 +84,8 @@ function toProject(apiProject: ApiProject, memberIds: string[] = []): Project {
     endDate: dateOnly(apiProject.endDate),
     id: apiProject.id,
     key: apiProject.key,
-    memberIds,
+    memberIds: members.map((member) => member.userId),
+    members,
     name: apiProject.name,
     startDate: dateOnly(apiProject.startDate),
     status: apiProject.status,
@@ -113,10 +137,7 @@ export async function getProjectById(id: string): Promise<Project> {
     apiRequest<ApiProjectMemberList>(`/projects/${id}/members`),
   ]);
 
-  return toProject(
-    project,
-    members.data.map((member) => member.user.id),
-  );
+  return toProject(project, members.data.map(toProjectMember));
 }
 
 export function getProjectKeySync(id: string): string {
@@ -168,4 +189,14 @@ export async function restoreProject(id: string): Promise<Project> {
       method: "POST",
     }),
   );
+}
+
+export async function addProjectMember(
+  projectId: string,
+  userId: string,
+): Promise<void> {
+  await apiRequest(`/projects/${projectId}/members`, {
+    body: JSON.stringify({ role: "member", userId }),
+    method: "POST",
+  });
 }

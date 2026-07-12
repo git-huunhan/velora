@@ -71,6 +71,7 @@ interface TaskSidebarProps {
   onOpenTask?: (task: Task) => void;
   className?: string;
   hideStatusDropdown?: boolean;
+  isEmbedded?: boolean;
   columns?: KanbanColumn[];
 }
 
@@ -80,6 +81,7 @@ export function TaskSidebar({
   onOpenTask,
   className,
   hideStatusDropdown,
+  isEmbedded,
   columns,
 }: TaskSidebarProps) {
   const [isDetailsOpen, setIsDetailsOpen] = useState(true);
@@ -117,7 +119,9 @@ export function TaskSidebar({
         "w-1/3 min-w-[300px] shrink-0 bg-muted/10 flex flex-col overflow-hidden relative border-l border-transparent z-10 shadow-[-10px_0_15px_-3px_rgba(0,0,0,0.03)] dark:shadow-none"
       }
     >
-      <div className="flex-1 p-0 lg:p-5 overflow-visible lg:overflow-y-auto custom-scrollbar min-h-0 space-y-4 pb-12">
+      <div
+        className={`flex-1 p-0 overflow-visible lg:overflow-y-auto custom-scrollbar min-h-0 space-y-4 pb-12 ${isEmbedded ? "lg:px-6 lg:py-5" : "lg:p-5"}`}
+      >
         {/* Status Dropdown */}
         {!hideStatusDropdown && (
           <div>

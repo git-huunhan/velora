@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 
 import {
+  addProjectMember,
   archiveProject,
   createProject,
   getProjectById,
@@ -86,6 +87,25 @@ export function useRestoreProject() {
     mutationFn: (id: string) => restoreProject(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: projectsKeys.all });
+    },
+  });
+}
+
+export function useAddProjectMember() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      userId,
+    }: {
+      projectId: string;
+      userId: string;
+    }) => addProjectMember(projectId, userId),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: projectsKeys.detail(variables.projectId),
+      });
+      queryClient.invalidateQueries({ queryKey: projectsKeys.lists() });
     },
   });
 }
