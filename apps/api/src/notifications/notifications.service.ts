@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import type { NotificationType, Prisma } from '../generated/prisma/client';
 import type {
   NotificationReadAllResponse,
   NotificationUnreadCountResponse,
@@ -25,11 +26,58 @@ const notificationInclude = {
     },
   },
 } as const;
+interface CreateNotificationInput {
+  actorId?: string | null;
+  message: string;
+  metadata?: Record<string, unknown> | null;
+  projectId?: string | null;
+  recipientId: string;
+  taskId?: string | null;
+  title: string;
+  type: NotificationType;
+}
 
+interface CreateNotificationForRecipientsInput extends Omit<
+  CreateNotificationInput,
+  'recipientId'
+> {
+  recipientIds: Array<string | null | undefined>;
+}
 @Injectable()
 export class NotificationsService {
   constructor(private readonly prisma: PrismaService) {}
+  async createForRecipient(
+    input: CreateNotificationInput,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<void> {
+    if (input.actorId && input.actorId === input.recipientId) return;
 
+    await client.notification.create({
+      data: {
+        actorId: input.actorId ?? null,
+        message: input.message,
+        metadata: input.metadata as Prisma.InputJsonValue | undefined,
+        projectId: input.projectId ?? null,
+        recipientId: input.recipientId,
+        taskId: input.taskId ?? null,
+        title: input.title,
+        type: input.type,
+      },
+    });
+  }
+
+  async createForRecipients(
+    input: CreateNotificationForRecipientsInput,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<void> {
+    const recipientIds = Array.from(
+      new Set(input.recipientIds.filter((id): id is string => Boolean(id))),
+    );
+
+    for (const recipientId of recipientIds) {
+      await this.createForRecipient({ ...input, recipientId }, client);
+    }
+  }
   async listForUser(
     userId: string,
     query: NotificationListQueryDto,

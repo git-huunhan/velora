@@ -23,7 +23,9 @@ import {
 } from '../domain/policies/project-permission.policy';
 import { validateMoveAnchors } from '../domain/policies/ordering.policy';
 import { PrismaService } from '../database/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
+  NotificationType,
   ProjectRole,
   ProjectStatus as PrismaProjectStatus,
   TaskPriority as PrismaTaskPriority,
@@ -118,7 +120,10 @@ type ActivityChange = {
 
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async listProjects(
     userId: string,
@@ -310,8 +315,12 @@ export class ProjectsService {
       throw new ConflictException('This user is already a project member.');
     }
 
-    return toProjectMemberResponse(
-      await this.prisma.projectMember.create({
+    const [project, member] = await this.prisma.$transaction([
+      this.prisma.project.findUniqueOrThrow({
+        where: { id: projectId },
+        select: { id: true, key: true, name: true },
+      }),
+      this.prisma.projectMember.create({
         data: {
           projectId,
           role: roleToPrisma[input.role],
@@ -319,7 +328,11 @@ export class ProjectsService {
         },
         include: { user: true },
       }),
-    );
+    ]);
+
+    await this.notifyProjectMemberAdded(userId, input.userId, project);
+
+    return toProjectMemberResponse(member);
   }
 
   async updateProjectMember(
@@ -627,6 +640,7 @@ export class ProjectsService {
       });
       return createdTask;
     });
+    await this.notifyTaskAssigned(userId, null, task);
     return toTaskResponse(task);
   }
 
@@ -721,6 +735,8 @@ export class ProjectsService {
       return updatedTask;
     });
 
+    await this.notifyTaskAssigned(userId, existing.assigneeId, updated);
+    await this.notifyTaskStatusChanged(userId, existing, updated);
     return toTaskResponse(updated);
   }
 
@@ -830,6 +846,7 @@ export class ProjectsService {
       return movedTask;
     });
 
+    await this.notifyTaskStatusChanged(userId, movingTask, moved);
     return toTaskResponse(moved);
   }
 
@@ -863,7 +880,7 @@ export class ProjectsService {
       projectId,
       ProjectPermission.UPDATE_WORK_ITEMS,
     );
-    await this.getTaskOrThrow(projectId, taskId);
+    const task = await this.getTaskOrThrow(projectId, taskId);
 
     const comment = await this.prisma.$transaction(async (transaction) => {
       const createdComment = await transaction.comment.create({
@@ -884,6 +901,7 @@ export class ProjectsService {
       return createdComment;
     });
 
+    await this.notifyTaskCommented(userId, task);
     return toCommentResponse(comment);
   }
 
@@ -927,6 +945,102 @@ export class ProjectsService {
     await this.prisma.task.delete({ where: { id: taskId } });
   }
 
+  private async notifyProjectMemberAdded(
+    actorId: string,
+    recipientId: string,
+    project: { id: string; key: string; name: string },
+  ): Promise<void> {
+    await this.notificationsService.createForRecipient({
+      actorId,
+      message: `You were added to ${project.name}.`,
+      metadata: { projectKey: project.key },
+      projectId: project.id,
+      recipientId,
+      title: `Added to ${project.name}`,
+      type: NotificationType.PROJECT_MEMBER_ADDED,
+    });
+  }
+
+  private async notifyTaskAssigned(
+    actorId: string,
+    previousAssigneeId: string | null,
+    task: {
+      assigneeId: string | null;
+      code: string;
+      id: string;
+      projectId: string;
+      title: string;
+    },
+  ): Promise<void> {
+    if (!task.assigneeId || task.assigneeId === previousAssigneeId) return;
+
+    await this.notificationsService.createForRecipient({
+      actorId,
+      message: `${task.title} was assigned to you.`,
+      metadata: { taskCode: task.code },
+      projectId: task.projectId,
+      recipientId: task.assigneeId,
+      taskId: task.id,
+      title: `${task.code} assigned to you`,
+      type: NotificationType.TASK_ASSIGNED,
+    });
+  }
+
+  private async notifyTaskCommented(
+    actorId: string,
+    task: {
+      assigneeId: string | null;
+      code: string;
+      id: string;
+      projectId: string;
+      reporterId: string | null;
+      title: string;
+    },
+  ): Promise<void> {
+    await this.notificationsService.createForRecipients({
+      actorId,
+      message: `A teammate commented on ${task.title}.`,
+      metadata: { taskCode: task.code },
+      projectId: task.projectId,
+      recipientIds: [task.assigneeId, task.reporterId],
+      taskId: task.id,
+      title: `New comment on ${task.code}`,
+      type: NotificationType.TASK_COMMENTED,
+    });
+  }
+
+  private async notifyTaskStatusChanged(
+    actorId: string,
+    previous: {
+      columnId: string;
+    },
+    task: {
+      assigneeId: string | null;
+      code: string;
+      columnId: string;
+      id: string;
+      projectId: string;
+      reporterId: string | null;
+      title: string;
+    },
+  ): Promise<void> {
+    if (previous.columnId === task.columnId) return;
+
+    await this.notificationsService.createForRecipients({
+      actorId,
+      message: `${task.title} moved to a different status.`,
+      metadata: {
+        fromColumnId: previous.columnId,
+        taskCode: task.code,
+        toColumnId: task.columnId,
+      },
+      projectId: task.projectId,
+      recipientIds: [task.assigneeId, task.reporterId],
+      taskId: task.id,
+      title: `${task.code} status changed`,
+      type: NotificationType.TASK_STATUS_CHANGED,
+    });
+  }
   private async assertProjectPermission(
     userId: string,
     projectId: string,
