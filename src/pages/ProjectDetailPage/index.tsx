@@ -1,4 +1,4 @@
-import {
+﻿import {
   AlertCircle,
   Calendar,
   ClipboardList,
@@ -15,7 +15,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -89,6 +89,14 @@ function useFilters() {
 export default function ProjectDetailPage() {
   const [isMembersOpen, setIsMembersOpen] = useState(false);
   const { id } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const routeTaskId = searchParams.get("task");
+  const clearRouteTaskId = () => {
+    if (!routeTaskId) return;
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete("task");
+    setSearchParams(nextParams, { replace: true });
+  };
   const { data: project, isLoading, isError } = useProject(id || "");
   const updateProject = useUpdateProject();
   const removeProjectMember = useRemoveProjectMember();
@@ -436,6 +444,8 @@ export default function ProjectDetailPage() {
             labels={listFilters.labels}
             layout={listLayout}
             headerSlot={toolbarNode}
+            initialTaskId={routeTaskId}
+            onInitialTaskOpen={clearRouteTaskId}
           />
         </TabsContent>
 
@@ -454,6 +464,8 @@ export default function ProjectDetailPage() {
             labels={boardFilters.labels}
             groupBy={boardFilters.groupBy}
             headerSlot={toolbarNode}
+            initialTaskId={routeTaskId}
+            onInitialTaskOpen={clearRouteTaskId}
           />
         </TabsContent>
       </div>

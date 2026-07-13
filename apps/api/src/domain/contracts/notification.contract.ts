@@ -1,5 +1,5 @@
 ﻿import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { NotificationType } from './enums';
+import { NotificationType, TaskType } from './enums';
 import { UserSummary } from './user.contract';
 
 export class NotificationProjectSummary {
@@ -22,6 +22,12 @@ export class NotificationTaskSummary {
 
   @ApiProperty({ example: 'Build Project 1 workspace' })
   title!: string;
+
+  @ApiProperty({ enum: TaskType })
+  type!: TaskType;
+
+  @ApiPropertyOptional({ example: 'To Do', nullable: true })
+  columnName!: string | null;
 }
 
 export class NotificationResponse {

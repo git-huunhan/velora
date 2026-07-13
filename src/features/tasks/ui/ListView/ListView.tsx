@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
   useMemo,
   useState,
   useEffect,
@@ -426,7 +426,7 @@ function SortableTableRow({
         isChecked ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-muted/40"
       }`}
     >
-      {/* Sticky drag handle — stays at left border even on horizontal scroll */}
+      {/* Sticky drag handle â€” stays at left border even on horizontal scroll */}
       <td
         className="sticky left-0 z-10 group-hover:z-30 bg-background p-0 w-6 border-b border-border relative"
         onClick={(e) => e.stopPropagation()}
@@ -907,6 +907,8 @@ interface ListViewProps {
   labels: string[];
   layout?: "table" | "split";
   headerSlot?: React.ReactNode;
+  initialTaskId?: string | null;
+  onInitialTaskOpen?: () => void;
 }
 
 export function ListView({
@@ -920,6 +922,8 @@ export function ListView({
   labels,
   layout = "table",
   headerSlot,
+  initialTaskId,
+  onInitialTaskOpen,
 }: ListViewProps) {
   const { data: tasks = [] } = useTasksByProject(projectId);
   const { data: columns = [] } = useProjectColumns(projectId);
@@ -945,6 +949,14 @@ export function ListView({
 
   const [checkedTaskIds, setCheckedTaskIds] = useState<Set<string>>(new Set());
   const [isBulkEditing, setIsBulkEditing] = useState(false);
+
+  useEffect(() => {
+    if (!initialTaskId) return;
+    const taskToOpen = tasks.find((task) => task.id === initialTaskId);
+    if (!taskToOpen) return;
+    setSelectedTaskId(taskToOpen.id);
+    onInitialTaskOpen?.();
+  }, [initialTaskId, tasks, onInitialTaskOpen]);
 
   // Custom resize state (replaces react-resizable-panels)
   const panelGroupRef = useRef<HTMLDivElement>(null);
@@ -1104,7 +1116,7 @@ export function ListView({
 
   const hasAnyChildrenInList = flatRenderList.some((item) => item.hasChildren);
 
-  // Row reorder state — stores task IDs in current display order
+  // Row reorder state â€” stores task IDs in current display order
   const [rowOrder, setRowOrder] = useState<string[]>([]);
 
   const sensors = useSensors(

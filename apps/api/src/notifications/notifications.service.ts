@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+﻿import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import type { NotificationType, Prisma } from '../generated/prisma/client';
 import type {
@@ -21,8 +21,14 @@ const notificationInclude = {
   task: {
     select: {
       code: true,
+      column: {
+        select: {
+          name: true,
+        },
+      },
       id: true,
       title: true,
+      type: true,
     },
   },
 } as const;

@@ -1,4 +1,4 @@
-import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
+﻿import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 
 import {
   Bug,
@@ -112,6 +112,8 @@ interface KanbanBoardProps {
   labels?: string[];
   groupBy?: GroupBy;
   headerSlot?: React.ReactNode;
+  initialTaskId?: string | null;
+  onInitialTaskOpen?: () => void;
 }
 
 import { useViewSettingsStore } from "../../model/useViewSettingsStore";
@@ -236,6 +238,8 @@ export function KanbanBoard({
   labels = [],
   groupBy = "None",
   headerSlot,
+  initialTaskId,
+  onInitialTaskOpen,
 }: KanbanBoardProps) {
   const { data: serverTaskData, isLoading } = useTasksByProject(projectId);
   const { users } = useUsers();
@@ -280,6 +284,14 @@ export function KanbanBoard({
   }, [serverTasks, isMutating, isLoading, projectId, isDropPersisting]);
 
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
+  useEffect(() => {
+    if (!initialTaskId) return;
+    const taskToOpen = localTasks.find((task) => task.id === initialTaskId);
+    if (!taskToOpen) return;
+    setSelectedTask(taskToOpen);
+    onInitialTaskOpen?.();
+  }, [initialTaskId, localTasks, onInitialTaskOpen]);
 
   // Sync selectedTask with the latest data from localTasks
   useEffect(() => {

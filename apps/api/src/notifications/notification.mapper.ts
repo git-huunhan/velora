@@ -1,6 +1,7 @@
-﻿import { NotificationType } from '../domain/contracts/enums';
+﻿import { NotificationType, TaskType } from '../domain/contracts/enums';
 import type { NotificationResponse } from '../domain/contracts';
 import type {
+  KanbanColumn,
   Notification,
   Project,
   Task,
@@ -15,10 +16,20 @@ const typeToApi = {
   TASK_STATUS_CHANGED: NotificationType.TASK_STATUS_CHANGED,
 } as const;
 
+const taskTypeToApi = {
+  BUG: TaskType.BUG,
+  EPIC: TaskType.EPIC,
+  SUBTASK: TaskType.SUBTASK,
+  TASK: TaskType.TASK,
+} as const;
 type NotificationWithContext = Notification & {
   actor: User | null;
   project: Pick<Project, 'id' | 'key' | 'name'> | null;
-  task: Pick<Task, 'id' | 'code' | 'title'> | null;
+  task:
+    | (Pick<Task, 'id' | 'code' | 'title' | 'type'> & {
+        column: Pick<KanbanColumn, 'name'> | null;
+      })
+    | null;
 };
 
 function toMetadata(value: unknown): Record<string, unknown> | null {
@@ -46,8 +57,10 @@ export function toNotificationResponse(
     task: notification.task
       ? {
           code: notification.task.code,
+          columnName: notification.task.column?.name ?? null,
           id: notification.task.id,
           title: notification.task.title,
+          type: taskTypeToApi[notification.task.type],
         }
       : null,
     title: notification.title,

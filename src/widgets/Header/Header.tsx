@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-import { ModeToggle } from "@/components/mode-toggle";
+﻿import { useState, useEffect } from "react";
 import { useSidebar } from "@/widgets/Sidebar/useSidebar";
 import {
   PanelLeftClose,
@@ -16,6 +15,10 @@ import {
   FolderKanban,
   CheckSquare,
   ClipboardList,
+  Check,
+  Monitor,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { NotificationDropdown } from "./NotificationDropdown";
 import { useAuth } from "@/features/auth";
@@ -24,6 +27,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -44,6 +48,7 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { useNavigate } from "react-router-dom";
+import { useTheme } from "@/components/use-theme";
 
 export function Header() {
   const [activePopover, setActivePopover] = useState<
@@ -69,6 +74,7 @@ export function Header() {
   const { toggleMobile, toggleDesktop, isDesktopClosed, isMobileOpen } =
     useSidebar();
   const { user, logout } = useAuth();
+  const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
 
   // Feature 2: Command Palette (Ctrl+K)
@@ -262,6 +268,23 @@ export function Header() {
           <User className="h-4 w-4 mr-2" />
           Profile & Settings
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => setTheme("light")}>
+          <Sun className="h-4 w-4 mr-2" />
+          Light
+          {theme === "light" ? <Check className="ml-auto h-4 w-4" /> : null}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme("dark")}>
+          <Moon className="h-4 w-4 mr-2" />
+          Dark
+          {theme === "dark" ? <Check className="ml-auto h-4 w-4" /> : null}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setTheme("system")}>
+          <Monitor className="h-4 w-4 mr-2" />
+          System
+          {theme === "system" ? <Check className="ml-auto h-4 w-4" /> : null}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={logout}
           className="text-destructive cursor-pointer font-medium"
@@ -393,7 +416,6 @@ export function Header() {
               <button className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-accent text-muted-foreground transition-colors">
                 <Settings className="h-5 w-5" />
               </button>
-              <ModeToggle />
               <div className="ml-2">{renderUserMenu()}</div>
             </div>
 
@@ -418,7 +440,6 @@ export function Header() {
                     <button className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-accent text-muted-foreground transition-colors">
                       <Settings className="h-5 w-5" />
                     </button>
-                    <ModeToggle />
                     <div className="ml-1">{renderUserMenu()}</div>
                   </div>
                 </PopoverContent>

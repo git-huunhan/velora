@@ -1,4 +1,4 @@
-import {
+﻿import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -967,6 +967,7 @@ export class ProjectsService {
     task: {
       assigneeId: string | null;
       code: string;
+      columnId: string;
       id: string;
       projectId: string;
       title: string;
@@ -977,7 +978,10 @@ export class ProjectsService {
     await this.notificationsService.createForRecipient({
       actorId,
       message: `${task.title} was assigned to you.`,
-      metadata: { taskCode: task.code },
+      metadata: {
+        columnName: await this.getColumnName(task.projectId, task.columnId),
+        taskCode: task.code,
+      },
       projectId: task.projectId,
       recipientId: task.assigneeId,
       taskId: task.id,
@@ -991,6 +995,7 @@ export class ProjectsService {
     task: {
       assigneeId: string | null;
       code: string;
+      columnId: string;
       id: string;
       projectId: string;
       reporterId: string | null;
@@ -1000,7 +1005,10 @@ export class ProjectsService {
     await this.notificationsService.createForRecipients({
       actorId,
       message: `A teammate commented on ${task.title}.`,
-      metadata: { taskCode: task.code },
+      metadata: {
+        columnName: await this.getColumnName(task.projectId, task.columnId),
+        taskCode: task.code,
+      },
       projectId: task.projectId,
       recipientIds: [task.assigneeId, task.reporterId],
       taskId: task.id,
@@ -1031,8 +1039,13 @@ export class ProjectsService {
       message: `${task.title} moved to a different status.`,
       metadata: {
         fromColumnId: previous.columnId,
+        fromColumnName: await this.getColumnName(
+          task.projectId,
+          previous.columnId,
+        ),
         taskCode: task.code,
         toColumnId: task.columnId,
+        toColumnName: await this.getColumnName(task.projectId, task.columnId),
       },
       projectId: task.projectId,
       recipientIds: [task.assigneeId, task.reporterId],
@@ -1082,6 +1095,16 @@ export class ProjectsService {
     return member;
   }
 
+  private async getColumnName(
+    projectId: string,
+    columnId: string,
+  ): Promise<string | null> {
+    const column = await this.prisma.kanbanColumn.findUnique({
+      select: { name: true, projectId: true },
+      where: { id: columnId },
+    });
+    return column?.projectId === projectId ? column.name : null;
+  }
   private async getKanbanColumnOrThrow(projectId: string, columnId: string) {
     const column = await this.prisma.kanbanColumn.findUnique({
       where: { id: columnId },
