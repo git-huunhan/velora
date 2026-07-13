@@ -248,6 +248,51 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                 </Popover>
               </div>
             )}
+            {recentProjects.length === 0 && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <SidebarItem
+                    icon={MoreHorizontal}
+                    label="More spaces"
+                    rightIcon={ChevronRight}
+                    className="pl-2"
+                  />
+                </PopoverTrigger>
+                <PopoverContent
+                  side="right"
+                  align="start"
+                  className="w-[300px] p-0 gap-0 bg-popover text-popover-foreground border-border shadow-xl rounded-xl"
+                >
+                  <div className="flex items-center justify-between px-3 pt-3 pb-2">
+                    <span className="font-semibold text-[13.5px]">Spaces</span>
+                    <PopoverClose asChild>
+                      <button className="text-muted-foreground hover:bg-accent rounded-sm p-1 transition-colors">
+                        <X className="w-4 h-4" />
+                      </button>
+                    </PopoverClose>
+                  </div>
+                  <div className="px-3 pb-3 border-b border-border/50">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search all spaces"
+                        className="pl-9 h-8 text-[13.5px] bg-transparent border-border hover:border-border focus-visible:ring-1 focus-visible:ring-primary"
+                      />
+                    </div>
+                  </div>
+                  <div className="p-1.5">
+                    <Link
+                      to="/projects"
+                      onClick={onNavClick}
+                      className="flex items-center gap-3 px-2 py-1.5 hover:bg-accent text-[13.5px] font-medium text-muted-foreground hover:text-foreground rounded-md cursor-pointer transition-colors"
+                    >
+                      <ListFilter className="w-4 h-4" />
+                      View all spaces
+                    </Link>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
 
             {/* Recommended */}
             <div className="space-y-1">

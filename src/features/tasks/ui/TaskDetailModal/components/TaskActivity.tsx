@@ -311,7 +311,13 @@ function formatActivityValue(
 ) {
   if (entry.field === "assigneeId" || entry.field === "reporterId") {
     if (!value) return "Unassigned";
-    const user = findActivityUser(value, users, tasks);
+    const snapshotUser =
+      value === entry.from
+        ? entry.fromUser
+        : value === entry.to
+          ? entry.toUser
+          : undefined;
+    const user = snapshotUser ?? findActivityUser(value, users, tasks);
     return user?.name ?? "Unknown user";
   }
   if (!value) return "None";
@@ -418,11 +424,11 @@ function ActivityItem({
   const isCreated = entry.field === "created";
   const fromUser =
     entry.field === "assigneeId" || entry.field === "reporterId"
-      ? findActivityUser(entry.from || "", users, tasks)
+      ? (entry.fromUser ?? findActivityUser(entry.from || "", users, tasks))
       : undefined;
   const toUser =
     entry.field === "assigneeId" || entry.field === "reporterId"
-      ? findActivityUser(entry.to || "", users, tasks)
+      ? (entry.toUser ?? findActivityUser(entry.to || "", users, tasks))
       : undefined;
   const actionLabel = isComment
     ? "added a comment"

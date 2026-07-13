@@ -1,4 +1,4 @@
-﻿import {
+import {
   AlertCircle,
   Calendar,
   ClipboardList,
@@ -14,10 +14,20 @@
   UserMinus,
   Pencil,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -44,7 +54,12 @@ import {
   useRemoveProjectMember,
   useUpdateProject,
 } from "@/features/projects";
-import { BoardToolbar, KanbanBoard, ListView } from "@/features/tasks";
+import {
+  BoardToolbar,
+  KanbanBoard,
+  ListView,
+  useTasksByProject,
+} from "@/features/tasks";
 import {
   SPACE_AVATARS,
   getSpaceAvatar,
@@ -88,6 +103,11 @@ function useFilters() {
 
 export default function ProjectDetailPage() {
   const [isMembersOpen, setIsMembersOpen] = useState(false);
+  const [memberPendingRemoval, setMemberPendingRemoval] = useState<{
+    affectedAssignedTaskCount: number;
+    name: string;
+    userId: string;
+  } | null>(null);
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const routeTaskId = searchParams.get("task");
@@ -98,6 +118,7 @@ export default function ProjectDetailPage() {
     setSearchParams(nextParams, { replace: true });
   };
   const { data: project, isLoading, isError } = useProject(id || "");
+  const { data: projectTasks = [] } = useTasksByProject(id || "");
   const updateProject = useUpdateProject();
   const removeProjectMember = useRemoveProjectMember();
 
@@ -115,6 +136,16 @@ export default function ProjectDetailPage() {
     (a, b) =>
       roleOrder[a.role] - roleOrder[b.role] || a.name.localeCompare(b.name),
   );
+  const assignedTaskCountByUserId = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    projectTasks.forEach((task) => {
+      if (!task.assigneeId) return;
+      counts.set(task.assigneeId, (counts.get(task.assigneeId) ?? 0) + 1);
+    });
+
+    return counts;
+  }, [projectTasks]);
 
   if (isLoading)
     return (
@@ -312,20 +343,14 @@ export default function ProjectDetailPage() {
                             disabled={removeProjectMember.isPending}
                             aria-label={`Remove ${member.name} from project`}
                             onClick={() => {
-                              removeProjectMember.mutate(
-                                {
-                                  projectId: project.id,
-                                  userId: member.userId,
-                                },
-                                {
-                                  onSuccess: () => {
-                                    toast.success("Member removed");
-                                  },
-                                  onError: () => {
-                                    toast.error("Failed to remove member");
-                                  },
-                                },
-                              );
+                              setMemberPendingRemoval({
+                                affectedAssignedTaskCount:
+                                  assignedTaskCountByUserId.get(
+                                    member.userId,
+                                  ) ?? member.affectedAssignedTaskCount,
+                                name: member.name,
+                                userId: member.userId,
+                              });
                             }}
                           >
                             <UserMinus className="h-4 w-4" />
@@ -337,6 +362,55 @@ export default function ProjectDetailPage() {
                 </div>
               </DialogContent>
             </Dialog>
+            <AlertDialog
+              open={Boolean(memberPendingRemoval)}
+              onOpenChange={(open) => {
+                if (!open) setMemberPendingRemoval(null);
+              }}
+            >
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Remove project member?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {memberPendingRemoval
+                      ? memberPendingRemoval.affectedAssignedTaskCount > 0
+                        ? `${memberPendingRemoval.name} will lose project access. ${memberPendingRemoval.affectedAssignedTaskCount} assigned work item${memberPendingRemoval.affectedAssignedTaskCount === 1 ? "" : "s"} will be moved to Unassigned.`
+                        : `${memberPendingRemoval.name} will lose project access. No assigned work items need cleanup.`
+                      : null}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={removeProjectMember.isPending}>
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    disabled={removeProjectMember.isPending}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      if (!memberPendingRemoval) return;
+                      removeProjectMember.mutate(
+                        {
+                          projectId: project.id,
+                          userId: memberPendingRemoval.userId,
+                        },
+                        {
+                          onSuccess: () => {
+                            toast.success("Member removed");
+                            setMemberPendingRemoval(null);
+                          },
+                          onError: () => {
+                            toast.error("Failed to remove member");
+                          },
+                        },
+                      );
+                    }}
+                  >
+                    Remove member
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
 
           <div className="flex items-center gap-2">

@@ -18,6 +18,7 @@ export function toProjectMemberResponse(
   return {
     createdAt: member.createdAt.toISOString(),
     projectId: member.projectId,
+    affectedAssignedTaskCount: 0,
     role: roleToApi[member.role],
     updatedAt: member.updatedAt.toISOString(),
     user: toUserSummary(member.user),

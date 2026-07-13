@@ -6,6 +6,7 @@ export interface ProjectMember {
   name: string;
   avatarUrl?: string;
   role: ProjectMemberRole;
+  affectedAssignedTaskCount: number;
 }
 
 export interface Project {

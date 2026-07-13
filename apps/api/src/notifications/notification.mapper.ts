@@ -11,6 +11,7 @@ import { toUserSummary } from '../users/user.mapper';
 
 const typeToApi = {
   PROJECT_MEMBER_ADDED: NotificationType.PROJECT_MEMBER_ADDED,
+  PROJECT_MEMBER_REMOVED: NotificationType.PROJECT_MEMBER_REMOVED,
   TASK_ASSIGNED: NotificationType.TASK_ASSIGNED,
   TASK_COMMENTED: NotificationType.TASK_COMMENTED,
   TASK_STATUS_CHANGED: NotificationType.TASK_STATUS_CHANGED,

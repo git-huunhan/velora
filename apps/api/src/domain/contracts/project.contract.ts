@@ -47,6 +47,9 @@ export class ProjectMemberResponse {
   @ApiProperty({ type: UserSummary })
   user!: UserSummary;
 
+  @ApiProperty({ default: 0 })
+  affectedAssignedTaskCount!: number;
+
   @ApiProperty({ format: 'date-time' })
   createdAt!: string;
 

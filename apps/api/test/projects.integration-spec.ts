@@ -499,6 +499,36 @@ describe('Projects API integration', () => {
         expect((body as ProjectMemberResponse).role).toBe('admin');
       });
 
+    const columnsResponse = await request(server)
+      .get(`/api/v1/projects/${projectId}/columns`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200);
+    const todoColumn = (columnsResponse.body as KanbanColumnListResponse)
+      .data[0];
+    const assignedTaskResponse = await request(server)
+      .post(`/api/v1/projects/${projectId}/tasks`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        assigneeId: memberUserId,
+        columnId: todoColumn.id,
+        title: 'Member cleanup task',
+        type: 'task',
+      })
+      .expect(201);
+    const assignedTask = assignedTaskResponse.body as TaskResponse;
+
+    await request(server)
+      .get(`/api/v1/projects/${projectId}/members`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ProjectMemberListResponse;
+        expect(
+          response.data.find((member) => member.user.id === memberUserId)
+            ?.affectedAssignedTaskCount,
+        ).toBe(1);
+      });
+
     const ownerId = await prisma.projectMember
       .findFirstOrThrow({
         where: { projectId, role: 'OWNER' },
@@ -521,6 +551,39 @@ describe('Projects API integration', () => {
       .delete(`/api/v1/projects/${projectId}/members/${memberUserId}`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .expect(204);
+
+    await expect(
+      prisma.projectMember.findUnique({
+        where: { projectId_userId: { projectId, userId: memberUserId } },
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      prisma.task.findUniqueOrThrow({
+        where: { id: assignedTask.id },
+        select: { assigneeId: true },
+      }),
+    ).resolves.toEqual({ assigneeId: null });
+    await expect(
+      prisma.activity.findFirst({
+        where: {
+          actorId: ownerId,
+          field: 'assigneeId',
+          from: memberUserId,
+          taskId: assignedTask.id,
+          to: null,
+        },
+      }),
+    ).resolves.toBeTruthy();
+    await expect(
+      prisma.notification.findFirst({
+        where: {
+          actorId: ownerId,
+          projectId,
+          recipientId: memberUserId,
+          type: 'PROJECT_MEMBER_REMOVED',
+        },
+      }),
+    ).resolves.toBeTruthy();
   });
 
   it('allows the same user to belong to multiple projects', async () => {

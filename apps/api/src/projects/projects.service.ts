@@ -288,12 +288,30 @@ export class ProjectsService {
       projectId,
       ProjectPermission.READ_PROJECT,
     );
-    const members = await this.prisma.projectMember.findMany({
-      where: { projectId },
-      include: { user: true },
-      orderBy: [{ role: 'desc' }, { createdAt: 'asc' }],
-    });
-    return { data: members.map(toProjectMemberResponse) };
+    const [members, assigneeCounts] = await Promise.all([
+      this.prisma.projectMember.findMany({
+        where: { projectId },
+        include: { user: true },
+        orderBy: [{ role: 'desc' }, { createdAt: 'asc' }],
+      }),
+      this.prisma.task.groupBy({
+        by: ['assigneeId'],
+        where: { projectId, assigneeId: { not: null } },
+        _count: { _all: true },
+      }),
+    ]);
+    const assignedTaskCountByUserId = new Map(
+      assigneeCounts
+        .filter((count) => count.assigneeId)
+        .map((count) => [count.assigneeId, count._count._all]),
+    );
+    return {
+      data: members.map((member) => ({
+        ...toProjectMemberResponse(member),
+        affectedAssignedTaskCount:
+          assignedTaskCountByUserId.get(member.userId) ?? 0,
+      })),
+    };
   }
 
   async addProjectMember(
@@ -378,9 +396,38 @@ export class ProjectsService {
       await this.assertProjectKeepsOwner(projectId);
     }
 
-    await this.prisma.projectMember.delete({
-      where: { projectId_userId: { projectId, userId: memberUserId } },
+    const project = await this.prisma.project.findUniqueOrThrow({
+      where: { id: projectId },
+      select: { id: true, key: true, name: true },
     });
+    const assignedTasks = await this.prisma.task.findMany({
+      where: { projectId, assigneeId: memberUserId },
+      select: { id: true },
+    });
+
+    await this.prisma.$transaction(async (transaction) => {
+      if (assignedTasks.length > 0) {
+        await transaction.activity.createMany({
+          data: assignedTasks.map((task) => ({
+            actorId: userId,
+            field: 'assigneeId',
+            from: memberUserId,
+            taskId: task.id,
+            to: null,
+          })),
+        });
+        await transaction.task.updateMany({
+          where: { projectId, assigneeId: memberUserId },
+          data: { assigneeId: null },
+        });
+      }
+
+      await transaction.projectMember.delete({
+        where: { projectId_userId: { projectId, userId: memberUserId } },
+      });
+    });
+
+    await this.notifyProjectMemberRemoved(userId, memberUserId, project);
   }
 
   async listKanbanColumns(
@@ -922,7 +969,36 @@ export class ProjectsService {
       include: { actor: true },
       orderBy: { createdAt: 'asc' },
     });
-    return { data: activities.map(toActivityResponse) };
+    const userIdPattern =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const referencedUserIds = Array.from(
+      new Set(
+        activities
+          .flatMap((activity) => [activity.from, activity.to])
+          .filter(
+            (value): value is string => !!value && userIdPattern.test(value),
+          ),
+      ),
+    );
+    const referencedUsers = referencedUserIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: referencedUserIds } },
+        })
+      : [];
+    const referencedUserById = new Map(
+      referencedUsers.map((user) => [user.id, user]),
+    );
+
+    return {
+      data: activities.map((activity) =>
+        toActivityResponse(activity, {
+          fromUser: activity.from
+            ? referencedUserById.get(activity.from)
+            : undefined,
+          toUser: activity.to ? referencedUserById.get(activity.to) : undefined,
+        }),
+      ),
+    };
   }
 
   async deleteTask(
@@ -959,6 +1035,22 @@ export class ProjectsService {
       recipientId,
       title: `Added to ${project.name}`,
       type: NotificationType.PROJECT_MEMBER_ADDED,
+    });
+  }
+
+  private async notifyProjectMemberRemoved(
+    actorId: string,
+    recipientId: string,
+    project: { id: string; key: string; name: string },
+  ): Promise<void> {
+    await this.notificationsService.createForRecipient({
+      actorId,
+      message: `You were removed from ${project.name}.`,
+      metadata: { projectKey: project.key },
+      projectId: project.id,
+      recipientId,
+      title: `Removed from ${project.name}`,
+      type: NotificationType.PROJECT_MEMBER_REMOVED,
     });
   }
 

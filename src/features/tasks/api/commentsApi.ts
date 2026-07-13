@@ -24,9 +24,11 @@ interface ApiActivity {
   createdAt: string;
   field: string;
   from: string | null;
+  fromUser?: ApiUserSummary | null;
   id: string;
   taskId: string;
   to: string | null;
+  toUser?: ApiUserSummary | null;
 }
 
 interface ApiCommentList {
@@ -74,9 +76,11 @@ function toActivity(activity: ApiActivity): ActivityEntry {
     createdAt: activity.createdAt,
     field: activity.field,
     from: activity.from ?? "",
+    fromUser: activity.fromUser ? toUser(activity.fromUser) : null,
     id: activity.id,
     taskId: activity.taskId,
     to: activity.to ?? "",
+    toUser: activity.toUser ? toUser(activity.toUser) : null,
   };
 }
 

@@ -40,6 +40,12 @@ export class ActivityResponse {
   @ApiPropertyOptional({ nullable: true })
   to!: string | null;
 
+  @ApiPropertyOptional({ type: UserSummary, nullable: true })
+  fromUser?: UserSummary | null;
+
+  @ApiPropertyOptional({ type: UserSummary, nullable: true })
+  toUser?: UserSummary | null;
+
   @ApiProperty({ format: 'date-time' })
   createdAt!: string;
 }

@@ -15,6 +15,8 @@ import {
   removeProjectMember,
   updateProject,
 } from "../api/projectsApi";
+import { tasksKeys } from "@/features/tasks/model/useTasks";
+import type { Task } from "@/features/tasks/model/types";
 import type { Project } from "./types";
 
 export const projectsKeys = {
@@ -122,10 +124,22 @@ export function useRemoveProjectMember() {
       userId: string;
     }) => removeProjectMember(projectId, userId),
     onSuccess: (_, variables) => {
+      queryClient.setQueryData<Task[]>(
+        tasksKeys.byProject(variables.projectId),
+        (tasks) =>
+          tasks?.map((task) =>
+            task.assigneeId === variables.userId
+              ? { ...task, assignee: undefined, assigneeId: undefined }
+              : task,
+          ),
+      );
       queryClient.invalidateQueries({
         queryKey: projectsKeys.detail(variables.projectId),
       });
       queryClient.invalidateQueries({ queryKey: projectsKeys.lists() });
+      queryClient.invalidateQueries({
+        queryKey: tasksKeys.byProject(variables.projectId),
+      });
     },
   });
 }

@@ -102,6 +102,16 @@ export interface ActivityEntry {
   field: string;
   from: string;
   to: string;
+  fromUser?: {
+    id: string;
+    name: string;
+    avatarUrl: string;
+  } | null;
+  toUser?: {
+    id: string;
+    name: string;
+    avatarUrl: string;
+  } | null;
   fromAvatar?: string;
   toAvatar?: string;
   createdAt: string;

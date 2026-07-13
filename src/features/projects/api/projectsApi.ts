@@ -34,6 +34,7 @@ interface ApiProjectList {
 }
 
 interface ApiProjectMember {
+  affectedAssignedTaskCount?: number;
   role: ProjectMemberRole;
   user: {
     avatarUrl: string | null;
@@ -66,6 +67,7 @@ function dateOnly(value?: string | null) {
 
 function toProjectMember(member: ApiProjectMember): ProjectMember {
   return {
+    affectedAssignedTaskCount: member.affectedAssignedTaskCount ?? 0,
     avatarUrl: member.user.avatarUrl ?? undefined,
     name: member.user.name,
     role: member.role,

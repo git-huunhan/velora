@@ -11,6 +11,7 @@ import {
   MessageSquareText,
   MoreVertical,
   SquaresExclude,
+  UserMinus,
   UserPlus,
 } from "lucide-react";
 import { useState } from "react";
@@ -48,6 +49,7 @@ import {
 
 const notificationIconByType: Record<NotificationType, typeof ClipboardList> = {
   project_member_added: UserPlus,
+  project_member_removed: UserMinus,
   task_assigned: ClipboardList,
   task_commented: MessageSquareText,
   task_status_changed: FolderKanban,
@@ -111,6 +113,10 @@ function getNotificationHeadline(
       return projectName
         ? `${actorName} added you to ${projectName}`
         : `${actorName} added you to a project`;
+    case "project_member_removed":
+      return projectName
+        ? `${actorName} removed you from ${projectName}`
+        : `${actorName} removed you from a project`;
     case "task_assigned":
       return `${actorName} assigned you to a task`;
     case "task_unassigned": {

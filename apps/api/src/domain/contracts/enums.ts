@@ -36,4 +36,5 @@ export enum NotificationType {
   TASK_CHILD_CREATED = 'task_child_created',
   TASK_UNASSIGNED = 'task_unassigned',
   PROJECT_MEMBER_ADDED = 'project_member_added',
+  PROJECT_MEMBER_REMOVED = 'project_member_removed',
 }
