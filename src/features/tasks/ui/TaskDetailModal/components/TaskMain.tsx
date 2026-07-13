@@ -53,6 +53,10 @@ import {
 import { useLogActivity } from "../../../model/useComments";
 import { useProject } from "@/features/projects";
 import { useUsers } from "@/features/users";
+import {
+  getUserAvatarUrl,
+  getUserInitials,
+} from "@/features/auth/model/userAvatar";
 import { PriorityIcon } from "../../PriorityIcon";
 import { TaskStatusSelect } from "../../shared/TaskStatusSelect";
 import { isSubtask } from "../../../model/taskHierarchy";
@@ -689,11 +693,14 @@ export function TaskMain({
                               <button className="flex items-center gap-1.5 text-muted-foreground hover:bg-muted/50 hover:text-foreground px-1.5 py-1 rounded border border-transparent hover:border-border/50 transition-colors w-full text-left min-w-0">
                                 {st.assignee ? (
                                   <>
-                                    <img
-                                      src={st.assignee.avatarUrl}
-                                      alt=""
-                                      className="w-5 h-5 rounded-full border border-border shrink-0"
-                                    />
+                                    <Avatar className="w-5 h-5 border border-border/50 shrink-0">
+                                      <AvatarImage
+                                        src={getUserAvatarUrl(st.assignee)}
+                                      />
+                                      <AvatarFallback className="text-[9px] bg-primary/10 text-primary font-semibold">
+                                        {getUserInitials(st.assignee.name)}
+                                      </AvatarFallback>
+                                    </Avatar>
                                     <span className="truncate">
                                       {st.assignee.name}
                                     </span>
@@ -768,10 +775,12 @@ export function TaskMain({
                                         }}
                                         className="gap-2 cursor-pointer"
                                       >
-                                        <Avatar className="h-6 w-6">
-                                          <AvatarImage src={user.avatarUrl} />
-                                          <AvatarFallback>
-                                            {user.name.charAt(0)}
+                                        <Avatar className="h-6 w-6 border border-border/50 shrink-0">
+                                          <AvatarImage
+                                            src={getUserAvatarUrl(user)}
+                                          />
+                                          <AvatarFallback className="text-[10px] bg-primary/10 text-primary font-semibold">
+                                            {getUserInitials(user.name)}
                                           </AvatarFallback>
                                         </Avatar>
                                         <span className="truncate">
@@ -837,8 +846,8 @@ export function TaskMain({
                             {
                               title: subtaskTitle.trim(),
                               projectId: task.projectId,
-                              type: isEpic ? childWorkType : "task",
-                              status: "todo",
+                              type: isEpic ? childWorkType : "subtask",
+                              status: task.status,
                               priority: "medium",
                               parentId: task.id,
                             },
@@ -897,8 +906,8 @@ export function TaskMain({
                               {
                                 title: subtaskTitle.trim(),
                                 projectId: task.projectId,
-                                type: isEpic ? childWorkType : "task",
-                                status: "todo",
+                                type: isEpic ? childWorkType : "subtask",
+                                status: task.status,
                                 priority: "medium",
                                 parentId: task.id,
                               },

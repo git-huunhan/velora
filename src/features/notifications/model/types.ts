@@ -1,8 +1,10 @@
-﻿export type NotificationType =
+export type NotificationType =
   | "project_member_added"
   | "task_assigned"
   | "task_commented"
-  | "task_status_changed";
+  | "task_status_changed"
+  | "task_child_created"
+  | "task_unassigned";
 
 export interface NotificationUserSummary {
   avatarUrl?: string;

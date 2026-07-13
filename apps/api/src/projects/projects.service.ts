@@ -1,4 +1,4 @@
-﻿import {
+import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
@@ -641,6 +641,7 @@ export class ProjectsService {
       return createdTask;
     });
     await this.notifyTaskAssigned(userId, null, task);
+    await this.notifyTaskChildCreated(userId, parentId, task);
     return toTaskResponse(task);
   }
 
@@ -961,6 +962,51 @@ export class ProjectsService {
     });
   }
 
+  private async notifyTaskChildCreated(
+    actorId: string,
+    parentId: string | null,
+    task: {
+      code: string;
+      columnId: string;
+      id: string;
+      projectId: string;
+      title: string;
+      type: PrismaTaskType;
+    },
+  ): Promise<void> {
+    if (!parentId) return;
+
+    const parent = await this.prisma.task.findFirst({
+      where: { id: parentId, projectId: task.projectId },
+      select: {
+        assigneeId: true,
+        code: true,
+        reporterId: true,
+        title: true,
+      },
+    });
+    if (!parent) return;
+
+    const childLabel =
+      task.type === PrismaTaskType.SUBTASK ? 'subtask' : 'work item';
+
+    await this.notificationsService.createForRecipients({
+      actorId,
+      message: `${task.title} was added under ${parent.title}.`,
+      metadata: {
+        childType: childLabel,
+        columnName: await this.getColumnName(task.projectId, task.columnId),
+        parentCode: parent.code,
+        parentTitle: parent.title,
+        taskCode: task.code,
+      },
+      projectId: task.projectId,
+      recipientIds: [parent.assigneeId, parent.reporterId],
+      taskId: task.id,
+      title: `${task.code} created under ${parent.code}`,
+      type: NotificationType.TASK_CHILD_CREATED,
+    });
+  }
   private async notifyTaskAssigned(
     actorId: string,
     previousAssigneeId: string | null,
@@ -973,13 +1019,41 @@ export class ProjectsService {
       title: string;
     },
   ): Promise<void> {
-    if (!task.assigneeId || task.assigneeId === previousAssigneeId) return;
+    if (task.assigneeId === previousAssigneeId) return;
+
+    const columnName = await this.getColumnName(task.projectId, task.columnId);
+    const nextAssigneeName = task.assigneeId
+      ? await this.getUserDisplayName(task.assigneeId)
+      : null;
+
+    if (previousAssigneeId && previousAssigneeId !== actorId) {
+      await this.notificationsService.createForRecipient({
+        actorId,
+        message: nextAssigneeName
+          ? `${task.title} was assigned to ${nextAssigneeName}.`
+          : `${task.title} was set to unassigned.`,
+        metadata: {
+          assigneeName: nextAssigneeName,
+          columnName,
+          taskCode: task.code,
+        },
+        projectId: task.projectId,
+        recipientId: previousAssigneeId,
+        taskId: task.id,
+        title: nextAssigneeName
+          ? `${task.code} assigned to ${nextAssigneeName}`
+          : `${task.code} set to unassigned`,
+        type: NotificationType.TASK_UNASSIGNED,
+      });
+    }
+
+    if (!task.assigneeId) return;
 
     await this.notificationsService.createForRecipient({
       actorId,
       message: `${task.title} was assigned to you.`,
       metadata: {
-        columnName: await this.getColumnName(task.projectId, task.columnId),
+        columnName,
         taskCode: task.code,
       },
       projectId: task.projectId,
@@ -1105,6 +1179,15 @@ export class ProjectsService {
     });
     return column?.projectId === projectId ? column.name : null;
   }
+
+  private async getUserDisplayName(userId: string): Promise<string | null> {
+    const user = await this.prisma.user.findUnique({
+      select: { displayName: true },
+      where: { id: userId },
+    });
+    return user?.displayName ?? null;
+  }
+
   private async getKanbanColumnOrThrow(projectId: string, columnId: string) {
     const column = await this.prisma.kanbanColumn.findUnique({
       where: { id: columnId },

@@ -1,4 +1,4 @@
-﻿import { NotificationType, TaskType } from '../domain/contracts/enums';
+import { NotificationType, TaskType } from '../domain/contracts/enums';
 import type { NotificationResponse } from '../domain/contracts';
 import type {
   KanbanColumn,
@@ -14,6 +14,8 @@ const typeToApi = {
   TASK_ASSIGNED: NotificationType.TASK_ASSIGNED,
   TASK_COMMENTED: NotificationType.TASK_COMMENTED,
   TASK_STATUS_CHANGED: NotificationType.TASK_STATUS_CHANGED,
+  TASK_CHILD_CREATED: NotificationType.TASK_CHILD_CREATED,
+  TASK_UNASSIGNED: NotificationType.TASK_UNASSIGNED,
 } as const;
 
 const taskTypeToApi = {

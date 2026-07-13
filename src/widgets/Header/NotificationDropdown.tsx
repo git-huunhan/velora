@@ -1,4 +1,4 @@
-﻿import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import {
   Bell,
   Bug,
@@ -51,6 +51,8 @@ const notificationIconByType: Record<NotificationType, typeof ClipboardList> = {
   task_assigned: ClipboardList,
   task_commented: MessageSquareText,
   task_status_changed: FolderKanban,
+  task_child_created: SquaresExclude,
+  task_unassigned: ClipboardList,
 };
 
 function getRelativeTime(value: string) {
@@ -111,8 +113,19 @@ function getNotificationHeadline(
         : `${actorName} added you to a project`;
     case "task_assigned":
       return `${actorName} assigned you to a task`;
+    case "task_unassigned": {
+      const assigneeName = getMetadataText(
+        notification.metadata,
+        "assigneeName",
+      );
+      return assigneeName
+        ? `${actorName} assigned this task to ${assigneeName}`
+        : `${actorName} unassigned this task`;
+    }
     case "task_commented":
       return `${actorName} commented on a task`;
+    case "task_child_created":
+      return `${actorName} created a subtask`;
     case "task_status_changed": {
       const fromColumnName = getNotificationFromColumnName(notification);
       const toColumnName = getNotificationColumnName(notification);

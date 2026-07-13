@@ -131,6 +131,70 @@ describe('Notification triggers integration', () => {
     });
   });
 
+  it('notifies the previous assignee when they are removed from a task', async () => {
+    const taskResponse = await request(server)
+      .post(`/api/v1/projects/${projectId}/tasks`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({
+        assigneeId: member.user.id,
+        columnId: todoColumn.id,
+        title: 'Reassigned trigger task',
+        type: 'task',
+      })
+      .expect(201);
+    const task = taskResponse.body as TaskResponse;
+
+    await request(server)
+      .patch(`/api/v1/projects/${projectId}/tasks/${task.id}`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({ assigneeId: owner.user.id })
+      .expect(200);
+
+    await expectNotification(member.user.id, NotificationType.TASK_UNASSIGNED, {
+      actorId: owner.user.id,
+      projectId,
+      taskId: task.id,
+    });
+    await expectNoNotification(owner.user.id, NotificationType.TASK_UNASSIGNED);
+  });
+  it('notifies parent task participants when a child work item is created', async () => {
+    const parentResponse = await request(server)
+      .post(`/api/v1/projects/${projectId}/tasks`)
+      .set('Authorization', `Bearer ${owner.accessToken}`)
+      .send({
+        columnId: todoColumn.id,
+        title: 'Parent task for child notification',
+        type: 'task',
+      })
+      .expect(201);
+    const parent = parentResponse.body as TaskResponse;
+
+    const childResponse = await request(server)
+      .post(`/api/v1/projects/${projectId}/tasks`)
+      .set('Authorization', `Bearer ${member.accessToken}`)
+      .send({
+        columnId: todoColumn.id,
+        parentId: parent.id,
+        title: 'Subtask notification child',
+        type: 'subtask',
+      })
+      .expect(201);
+    const child = childResponse.body as TaskResponse;
+
+    await expectNotification(
+      owner.user.id,
+      NotificationType.TASK_CHILD_CREATED,
+      {
+        actorId: member.user.id,
+        projectId,
+        taskId: child.id,
+      },
+    );
+    await expectNoNotification(
+      member.user.id,
+      NotificationType.TASK_CHILD_CREATED,
+    );
+  });
   it('notifies related users for comments and status changes', async () => {
     const taskResponse = await request(server)
       .post(`/api/v1/projects/${projectId}/tasks`)
