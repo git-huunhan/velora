@@ -11,10 +11,12 @@ import {
   Plus,
   Share2,
   Users,
+  UserMinus,
   Pencil,
 } from "lucide-react";
 import { useState } from "react";
 import { useParams } from "react-router-dom";
+import { toast } from "sonner";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -37,7 +39,11 @@ import {
   getUserAvatarUrl,
   getUserInitials,
 } from "@/features/auth/model/userAvatar";
-import { useProject, useUpdateProject } from "@/features/projects";
+import {
+  useProject,
+  useRemoveProjectMember,
+  useUpdateProject,
+} from "@/features/projects";
 import { BoardToolbar, KanbanBoard, ListView } from "@/features/tasks";
 import {
   SPACE_AVATARS,
@@ -85,6 +91,7 @@ export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: project, isLoading, isError } = useProject(id || "");
   const updateProject = useUpdateProject();
+  const removeProjectMember = useRemoveProjectMember();
 
   const [activeTab, setActiveTab] = useState("board");
 
@@ -267,27 +274,58 @@ export default function ProjectDetailPage() {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="max-h-80 overflow-y-auto p-2 custom-scrollbar">
-                  {sortedProjectMembers.map((member) => (
-                    <div
-                      key={member.userId}
-                      className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/50"
-                    >
-                      <Avatar className="h-8 w-8 border border-border/50">
-                        <AvatarImage src={getUserAvatarUrl(member)} />
-                        <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
-                          {getUserInitials(member.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium">
-                          {member.name}
+                  {sortedProjectMembers.map((member) => {
+                    const canRemoveMember = member.role !== "owner";
+
+                    return (
+                      <div
+                        key={member.userId}
+                        className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/50"
+                      >
+                        <Avatar className="h-8 w-8 border border-border/50">
+                          <AvatarImage src={getUserAvatarUrl(member)} />
+                          <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
+                            {getUserInitials(member.name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium">
+                            {member.name}
+                          </div>
+                          <div className="text-xs capitalize text-muted-foreground">
+                            {member.role}
+                          </div>
                         </div>
-                        <div className="text-xs capitalize text-muted-foreground">
-                          {member.role}
-                        </div>
+                        {canRemoveMember ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            disabled={removeProjectMember.isPending}
+                            aria-label={`Remove ${member.name} from project`}
+                            onClick={() => {
+                              removeProjectMember.mutate(
+                                {
+                                  projectId: project.id,
+                                  userId: member.userId,
+                                },
+                                {
+                                  onSuccess: () => {
+                                    toast.success("Member removed");
+                                  },
+                                  onError: () => {
+                                    toast.error("Failed to remove member");
+                                  },
+                                },
+                              );
+                            }}
+                          >
+                            <UserMinus className="h-4 w-4" />
+                          </Button>
+                        ) : null}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </DialogContent>
             </Dialog>

@@ -12,6 +12,7 @@ import {
   getProjectById,
   getProjects,
   restoreProject,
+  removeProjectMember,
   updateProject,
 } from "../api/projectsApi";
 import type { Project } from "./types";
@@ -101,6 +102,25 @@ export function useAddProjectMember() {
       projectId: string;
       userId: string;
     }) => addProjectMember(projectId, userId),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: projectsKeys.detail(variables.projectId),
+      });
+      queryClient.invalidateQueries({ queryKey: projectsKeys.lists() });
+    },
+  });
+}
+
+export function useRemoveProjectMember() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      userId,
+    }: {
+      projectId: string;
+      userId: string;
+    }) => removeProjectMember(projectId, userId),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
         queryKey: projectsKeys.detail(variables.projectId),

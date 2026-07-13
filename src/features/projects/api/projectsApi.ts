@@ -200,3 +200,12 @@ export async function addProjectMember(
     method: "POST",
   });
 }
+
+export async function removeProjectMember(
+  projectId: string,
+  userId: string,
+): Promise<void> {
+  await apiRequest(`/projects/${projectId}/members/${userId}`, {
+    method: "DELETE",
+  });
+}

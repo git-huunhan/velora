@@ -523,6 +523,42 @@ describe('Projects API integration', () => {
       .expect(204);
   });
 
+  it('allows the same user to belong to multiple projects', async () => {
+    const firstProject = await createProject(`${key}A`, 'Member Scope A');
+    const secondProject = await createProject(`${key}B`, 'Member Scope B');
+
+    try {
+      await request(server)
+        .post(`/api/v1/projects/${firstProject.id}/members`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ role: 'member', userId: memberUserId })
+        .expect(201);
+
+      await request(server)
+        .post(`/api/v1/projects/${secondProject.id}/members`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ role: 'member', userId: memberUserId })
+        .expect(201);
+
+      await request(server)
+        .post(`/api/v1/projects/${secondProject.id}/members`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ role: 'member', userId: memberUserId })
+        .expect(409);
+
+      const memberships = await prisma.projectMember.findMany({
+        where: {
+          projectId: { in: [firstProject.id, secondProject.id] },
+          userId: memberUserId,
+        },
+      });
+      expect(memberships).toHaveLength(2);
+    } finally {
+      await prisma.project.deleteMany({
+        where: { id: { in: [firstProject.id, secondProject.id] } },
+      });
+    }
+  });
   async function registerAndGetAccessToken(
     email: string,
     displayName: string,
@@ -539,5 +575,17 @@ describe('Projects API integration', () => {
       .send({ displayName, email, password })
       .expect(201);
     return response.body as AuthResponse;
+  }
+
+  async function createProject(
+    projectKey: string,
+    name: string,
+  ): Promise<ProjectResponse> {
+    const response = await request(server)
+      .post('/api/v1/projects')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ key: projectKey, name })
+      .expect(201);
+    return response.body as ProjectResponse;
   }
 });
