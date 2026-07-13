@@ -1,4 +1,4 @@
-export enum UserRole {
+﻿export enum UserRole {
   ADMIN = 'admin',
   USER = 'user',
 }
@@ -27,4 +27,11 @@ export enum TaskPriority {
   LOW = 'low',
   MEDIUM = 'medium',
   HIGH = 'high',
+}
+
+export enum NotificationType {
+  TASK_ASSIGNED = 'task_assigned',
+  TASK_COMMENTED = 'task_commented',
+  TASK_STATUS_CHANGED = 'task_status_changed',
+  PROJECT_MEMBER_ADDED = 'project_member_added',
 }

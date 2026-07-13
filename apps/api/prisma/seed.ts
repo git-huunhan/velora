@@ -1,9 +1,10 @@
-import 'dotenv/config';
+﻿import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { randomBytes, scrypt as scryptCallback } from 'node:crypto';
 import { promisify } from 'node:util';
 import {
   PrismaClient,
+  NotificationType,
   ProjectStatus,
   ProjectRole,
   TaskPriority,
@@ -41,6 +42,8 @@ const ids = {
   bug: '00000000-0000-4000-8000-000000000304',
   comment: '00000000-0000-4000-8000-000000000401',
   activity: '00000000-0000-4000-8000-000000000501',
+  notificationAssigned: '00000000-0000-4000-8000-000000000601',
+  notificationCommented: '00000000-0000-4000-8000-000000000602',
 } as const;
 
 async function seed(): Promise<void> {
@@ -81,6 +84,7 @@ async function seed(): Promise<void> {
       },
     });
 
+    await tx.notification.deleteMany({ where: { recipientId: ids.user } });
     await tx.task.deleteMany({ where: { projectId: ids.project } });
     await tx.kanbanColumn.deleteMany({ where: { projectId: ids.project } });
     await tx.projectMember.deleteMany({ where: { projectId: ids.project } });
@@ -194,6 +198,34 @@ async function seed(): Promise<void> {
         from: 'todo',
         to: 'in-progress',
       },
+    });
+
+    await tx.notification.createMany({
+      data: [
+        {
+          id: ids.notificationAssigned,
+          recipientId: ids.user,
+          actorId: null,
+          projectId: ids.project,
+          taskId: ids.task,
+          type: NotificationType.TASK_ASSIGNED,
+          title: 'Task assigned to you',
+          message: 'PRJ1-125 is ready for review in Project 1.',
+          metadata: { reason: 'seed' },
+        },
+        {
+          id: ids.notificationCommented,
+          recipientId: ids.user,
+          actorId: null,
+          projectId: ids.project,
+          taskId: ids.task,
+          type: NotificationType.TASK_COMMENTED,
+          title: 'New comment on a task',
+          message: 'A teammate commented on PRJ1-125.',
+          metadata: { reason: 'seed' },
+          readAt: new Date('2026-07-13T00:00:00.000Z'),
+        },
+      ],
     });
   });
 }

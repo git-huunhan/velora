@@ -39,6 +39,13 @@ enum TaskPriority {
   HIGH
 }
 
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_COMMENTED
+  TASK_STATUS_CHANGED
+  PROJECT_MEMBER_ADDED
+}
+
 model User {
   id            String          @id @default(uuid()) @db.Uuid
   email         String          @unique
@@ -52,6 +59,8 @@ model User {
   reportedTasks Task[]          @relation("TaskReporter")
   comments      Comment[]
   activities    Activity[]
+  notifications Notification[] @relation("NotificationRecipient")
+  actedNotifications Notification[] @relation("NotificationActor")
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 }
@@ -82,6 +91,7 @@ model Project {
   members     ProjectMember[]
   columns     KanbanColumn[]
   tasks       Task[]
+  notifications Notification[]
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 }
@@ -138,6 +148,7 @@ model Task {
   reporter    User?        @relation("TaskReporter", fields: [reporterId], references: [id], onDelete: SetNull)
   comments    Comment[]
   activities  Activity[]
+  notifications Notification[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
@@ -177,3 +188,26 @@ model Activity {
   @@index([taskId, createdAt])
   @@index([actorId])
 }
+model Notification {
+  id          String           @id @default(uuid()) @db.Uuid
+  recipientId String          @db.Uuid
+  actorId     String?         @db.Uuid
+  projectId   String?         @db.Uuid
+  taskId      String?         @db.Uuid
+  type        NotificationType
+  title       String
+  message     String
+  metadata    Json?
+  readAt      DateTime?
+  recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor       User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  project     Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  task        Task?            @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  createdAt   DateTime         @default(now())
+
+  @@index([recipientId, readAt, createdAt])
+  @@index([projectId, taskId])
+  @@index([actorId])
+}
+
+
