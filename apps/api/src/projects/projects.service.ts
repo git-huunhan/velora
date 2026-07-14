@@ -666,6 +666,7 @@ export class ProjectsService {
           code,
           columnId: input.columnId,
           description: input.description?.trim() ?? '',
+          title: input.title.trim(),
           dueDate: input.dueDate ? new Date(input.dueDate) : null,
           labels: this.normalizeLabels(input.labels),
           parentId,
@@ -673,7 +674,6 @@ export class ProjectsService {
           projectId,
           rank,
           reporterId: userId,
-          title: input.title.trim(),
           type: taskTypeToPrisma[type],
         },
         include: { assignee: true, reporter: true },
@@ -1029,11 +1029,9 @@ export class ProjectsService {
   ): Promise<void> {
     await this.notificationsService.createForRecipient({
       actorId,
-      message: `You were added to ${project.name}.`,
-      metadata: { projectKey: project.key },
+      metadata: { projectKey: project.key, projectName: project.name },
       projectId: project.id,
       recipientId,
-      title: `Added to ${project.name}`,
       type: NotificationType.PROJECT_MEMBER_ADDED,
     });
   }
@@ -1045,11 +1043,9 @@ export class ProjectsService {
   ): Promise<void> {
     await this.notificationsService.createForRecipient({
       actorId,
-      message: `You were removed from ${project.name}.`,
-      metadata: { projectKey: project.key },
+      metadata: { projectKey: project.key, projectName: project.name },
       projectId: project.id,
       recipientId,
-      title: `Removed from ${project.name}`,
       type: NotificationType.PROJECT_MEMBER_REMOVED,
     });
   }
@@ -1084,21 +1080,23 @@ export class ProjectsService {
 
     await this.notificationsService.createForRecipients({
       actorId,
-      message: `${task.title} was added under ${parent.title}.`,
       metadata: {
         childType: childLabel,
         columnName: await this.getColumnName(task.projectId, task.columnId),
         parentCode: parent.code,
         parentTitle: parent.title,
+        projectName: await this.getProjectName(task.projectId),
         taskCode: task.code,
+        taskTitle: task.title,
+        taskType: taskTypeToApi[task.type],
       },
       projectId: task.projectId,
       recipientIds: [parent.assigneeId, parent.reporterId],
       taskId: task.id,
-      title: `${task.code} created under ${parent.code}`,
       type: NotificationType.TASK_CHILD_CREATED,
     });
   }
+
   private async notifyTaskAssigned(
     actorId: string,
     previousAssigneeId: string | null,
@@ -1109,32 +1107,34 @@ export class ProjectsService {
       id: string;
       projectId: string;
       title: string;
+      type: PrismaTaskType;
     },
   ): Promise<void> {
     if (task.assigneeId === previousAssigneeId) return;
 
     const columnName = await this.getColumnName(task.projectId, task.columnId);
+    const projectName = await this.getProjectName(task.projectId);
     const nextAssigneeName = task.assigneeId
       ? await this.getUserDisplayName(task.assigneeId)
       : null;
+    const taskSnapshot = {
+      columnName,
+      projectName,
+      taskCode: task.code,
+      taskTitle: task.title,
+      taskType: taskTypeToApi[task.type],
+    };
 
     if (previousAssigneeId && previousAssigneeId !== actorId) {
       await this.notificationsService.createForRecipient({
         actorId,
-        message: nextAssigneeName
-          ? `${task.title} was assigned to ${nextAssigneeName}.`
-          : `${task.title} was set to unassigned.`,
         metadata: {
+          ...taskSnapshot,
           assigneeName: nextAssigneeName,
-          columnName,
-          taskCode: task.code,
         },
         projectId: task.projectId,
         recipientId: previousAssigneeId,
         taskId: task.id,
-        title: nextAssigneeName
-          ? `${task.code} assigned to ${nextAssigneeName}`
-          : `${task.code} set to unassigned`,
         type: NotificationType.TASK_UNASSIGNED,
       });
     }
@@ -1143,15 +1143,10 @@ export class ProjectsService {
 
     await this.notificationsService.createForRecipient({
       actorId,
-      message: `${task.title} was assigned to you.`,
-      metadata: {
-        columnName,
-        taskCode: task.code,
-      },
+      metadata: taskSnapshot,
       projectId: task.projectId,
       recipientId: task.assigneeId,
       taskId: task.id,
-      title: `${task.code} assigned to you`,
       type: NotificationType.TASK_ASSIGNED,
     });
   }
@@ -1166,19 +1161,21 @@ export class ProjectsService {
       projectId: string;
       reporterId: string | null;
       title: string;
+      type: PrismaTaskType;
     },
   ): Promise<void> {
     await this.notificationsService.createForRecipients({
       actorId,
-      message: `A teammate commented on ${task.title}.`,
       metadata: {
         columnName: await this.getColumnName(task.projectId, task.columnId),
+        projectName: await this.getProjectName(task.projectId),
         taskCode: task.code,
+        taskTitle: task.title,
+        taskType: taskTypeToApi[task.type],
       },
       projectId: task.projectId,
       recipientIds: [task.assigneeId, task.reporterId],
       taskId: task.id,
-      title: `New comment on ${task.code}`,
       type: NotificationType.TASK_COMMENTED,
     });
   }
@@ -1196,29 +1193,39 @@ export class ProjectsService {
       projectId: string;
       reporterId: string | null;
       title: string;
+      type: PrismaTaskType;
     },
   ): Promise<void> {
     if (previous.columnId === task.columnId) return;
 
     await this.notificationsService.createForRecipients({
       actorId,
-      message: `${task.title} moved to a different status.`,
       metadata: {
         fromColumnId: previous.columnId,
         fromColumnName: await this.getColumnName(
           task.projectId,
           previous.columnId,
         ),
+        projectName: await this.getProjectName(task.projectId),
         taskCode: task.code,
+        taskTitle: task.title,
+        taskType: taskTypeToApi[task.type],
         toColumnId: task.columnId,
         toColumnName: await this.getColumnName(task.projectId, task.columnId),
       },
       projectId: task.projectId,
       recipientIds: [task.assigneeId, task.reporterId],
       taskId: task.id,
-      title: `${task.code} status changed`,
       type: NotificationType.TASK_STATUS_CHANGED,
     });
+  }
+
+  private async getProjectName(projectId: string): Promise<string | null> {
+    const project = await this.prisma.project.findUnique({
+      select: { name: true },
+      where: { id: projectId },
+    });
+    return project?.name ?? null;
   }
   private async assertProjectPermission(
     userId: string,

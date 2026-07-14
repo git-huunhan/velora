@@ -9,13 +9,22 @@ const USER_AVATAR_COLORS = [
   "06b6d4",
   "ec4899",
   "84cc16",
+  "14b8a6",
+  "6366f1",
+  "f97316",
+  "a855f7",
+  "0ea5e9",
+  "2563eb",
+  "e11d48",
+  "f97316",
+  "0891b2",
+  "7c3aed",
+  "ea580c",
+  "16a34a",
 ];
 
 const USER_AVATAR_COLOR_OVERRIDES: Record<string, string> = {
   "admin pro": "10b981",
-  "alex smith": "10b981",
-  "bob dev": "f59e0b",
-  "jane smith": "3b82f6",
 };
 
 function getStableIndex(value: string, size: number) {
@@ -37,13 +46,15 @@ export function getUserInitials(name?: string | null) {
 
 export function getUserAvatarColor(name?: string | null) {
   const normalizedName = name?.trim().toLowerCase() ?? "";
-  if (!normalizedName) return USER_AVATAR_COLORS[0];
-  return (
-    USER_AVATAR_COLOR_OVERRIDES[normalizedName] ??
-    USER_AVATAR_COLORS[
-      getStableIndex(normalizedName, USER_AVATAR_COLORS.length)
-    ]
-  );
+  if (USER_AVATAR_COLOR_OVERRIDES[normalizedName]) {
+    return USER_AVATAR_COLOR_OVERRIDES[normalizedName];
+  }
+
+  const initials = getUserInitials(name).toLowerCase();
+  if (!initials || initials === "?") return USER_AVATAR_COLORS[0];
+  return USER_AVATAR_COLORS[
+    getStableIndex(initials, USER_AVATAR_COLORS.length)
+  ];
 }
 
 export function getUserAvatarUrl(user?: Pick<User, "name"> | null) {

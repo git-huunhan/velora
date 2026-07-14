@@ -49,9 +49,7 @@ describe('Notifications API integration', () => {
 
     const unread = await prisma.notification.create({
       data: {
-        message: 'A task was assigned to you.',
         recipientId: admin.user.id,
-        title: 'Task assigned',
         type: NotificationType.TASK_ASSIGNED,
       },
     });
@@ -59,10 +57,8 @@ describe('Notifications API integration', () => {
 
     const read = await prisma.notification.create({
       data: {
-        message: 'A teammate commented on your task.',
         readAt: new Date(),
         recipientId: admin.user.id,
-        title: 'Task commented',
         type: NotificationType.TASK_COMMENTED,
       },
     });
@@ -70,9 +66,7 @@ describe('Notifications API integration', () => {
 
     const otherNotification = await prisma.notification.create({
       data: {
-        message: 'This belongs to another user.',
         recipientId: other.user.id,
-        title: 'Other user notification',
         type: NotificationType.PROJECT_MEMBER_ADDED,
       },
     });
@@ -116,6 +110,9 @@ describe('Notifications API integration', () => {
           response.data.some((item) => item.id === otherNotificationId),
         ).toBe(false);
         expect(response.meta.total).toBe(2);
+        expect(response.data[0]).not.toHaveProperty('title');
+        expect(response.data[0]).not.toHaveProperty('message');
+        expect(response.data[0]).not.toHaveProperty('fallbackMessage');
       });
   });
 

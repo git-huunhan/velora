@@ -4,6 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/features/auth";
+import {
+  getUserAvatarColor,
+  getUserAvatarUrl,
+  getUserInitials,
+} from "@/features/auth/model/userAvatar";
 import { useState } from "react";
 
 export default function ProfilePage() {
@@ -30,11 +35,16 @@ export default function ProfilePage() {
 
         <div className="flex items-center gap-5 p-5 bg-card border border-border rounded-xl">
           <Avatar className="h-16 w-16 border-2 border-primary/30">
-            <AvatarImage
-              src={`https://api.dicebear.com/7.x/initials/svg?seed=${user?.name}&backgroundColor=10b981&textColor=ffffff&backgroundType=solid`}
-            />
-            <AvatarFallback className="bg-primary/10 text-primary font-bold text-lg">
-              {user?.name?.slice(0, 2).toUpperCase()}
+            <AvatarImage src={getUserAvatarUrl(user)} />
+            <AvatarFallback
+              className="text-lg font-bold text-white"
+              style={
+                user
+                  ? { backgroundColor: `#${getUserAvatarColor(user.name)}` }
+                  : undefined
+              }
+            >
+              {getUserInitials(user?.name)}
             </AvatarFallback>
           </Avatar>
           <div>

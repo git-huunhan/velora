@@ -1,4 +1,4 @@
-﻿import 'dotenv/config';
+import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { randomBytes, scrypt as scryptCallback } from 'node:crypto';
 import { promisify } from 'node:util';
@@ -209,8 +209,6 @@ async function seed(): Promise<void> {
           projectId: ids.project,
           taskId: ids.task,
           type: NotificationType.TASK_ASSIGNED,
-          title: 'Task assigned to you',
-          message: 'PRJ1-125 is ready for review in Project 1.',
           metadata: { reason: 'seed' },
         },
         {
@@ -220,8 +218,6 @@ async function seed(): Promise<void> {
           projectId: ids.project,
           taskId: ids.task,
           type: NotificationType.TASK_COMMENTED,
-          title: 'New comment on a task',
-          message: 'A teammate commented on PRJ1-125.',
           metadata: { reason: 'seed' },
           readAt: new Date('2026-07-13T00:00:00.000Z'),
         },

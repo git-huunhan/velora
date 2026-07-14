@@ -49,6 +49,11 @@ import {
 } from "@/components/ui/command";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "@/components/use-theme";
+import {
+  getUserAvatarColor,
+  getUserAvatarUrl,
+  getUserInitials,
+} from "@/features/auth/model/userAvatar";
 
 export function Header() {
   const [activePopover, setActivePopover] = useState<
@@ -204,11 +209,18 @@ export function Header() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <Checkbox />
                 <Avatar className="h-5 w-5 shrink-0">
-                  <AvatarImage
-                    src={`https://api.dicebear.com/7.x/initials/svg?seed=${user?.name}&backgroundColor=10b981&textColor=ffffff&backgroundType=solid`}
-                  />
-                  <AvatarFallback className="bg-primary/10 text-primary font-semibold text-[10px]">
-                    {user?.name?.slice(0, 2).toUpperCase()}
+                  <AvatarImage src={getUserAvatarUrl(user)} />
+                  <AvatarFallback
+                    className="text-[10px] font-semibold text-white"
+                    style={
+                      user
+                        ? {
+                            backgroundColor: `#${getUserAvatarColor(user.name)}`,
+                          }
+                        : undefined
+                    }
+                  >
+                    {getUserInitials(user?.name)}
                   </AvatarFallback>
                 </Avatar>
                 <span className="text-sm truncate">{user?.name} (Me)</span>
@@ -245,14 +257,18 @@ export function Header() {
   const renderUserMenu = () => (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="flex items-center justify-center rounded-full hover:bg-accent transition-colors">
-          <Avatar className="h-8 w-8 border-2 border-primary/20 shrink-0">
-            <AvatarImage
-              src={`https://api.dicebear.com/7.x/initials/svg?seed=${user?.name}&backgroundColor=10b981&textColor=ffffff&backgroundType=solid`}
-              alt={user?.name}
-            />
-            <AvatarFallback className="bg-primary/10 text-primary font-semibold text-xs">
-              {user?.name?.slice(0, 2).toUpperCase()}
+        <button className="flex cursor-pointer items-center justify-center rounded-full hover:bg-accent transition-colors">
+          <Avatar className="h-8 w-8 shrink-0">
+            <AvatarImage src={getUserAvatarUrl(user)} alt={user?.name} />
+            <AvatarFallback
+              className="text-xs font-semibold text-white"
+              style={
+                user
+                  ? { backgroundColor: `#${getUserAvatarColor(user.name)}` }
+                  : undefined
+              }
+            >
+              {getUserInitials(user?.name)}
             </AvatarFallback>
           </Avatar>
         </button>

@@ -14,7 +14,7 @@ import {
   UserMinus,
   UserPlus,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -35,6 +35,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import {
+  getUserAvatarColor,
   getUserAvatarUrl,
   getUserInitials,
 } from "@/features/auth/model/userAvatar";
@@ -76,8 +77,45 @@ function getMetadataText(
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function getTaskTypeIcon(task: NotificationItem["task"]) {
-  switch (task?.type) {
+function getNotificationProjectName(notification: NotificationItem) {
+  return (
+    getMetadataText(notification.metadata, "projectName") ??
+    notification.project?.name?.trim() ??
+    null
+  );
+}
+
+function getNotificationTaskTitle(notification: NotificationItem) {
+  return (
+    getMetadataText(notification.metadata, "taskTitle") ??
+    notification.task?.title?.trim() ??
+    null
+  );
+}
+
+function getNotificationTaskCode(notification: NotificationItem) {
+  return (
+    getMetadataText(notification.metadata, "taskCode") ??
+    notification.task?.code?.trim() ??
+    null
+  );
+}
+
+function getNotificationTaskType(notification: NotificationItem) {
+  const metadataType = getMetadataText(notification.metadata, "taskType");
+  if (
+    metadataType === "bug" ||
+    metadataType === "epic" ||
+    metadataType === "subtask" ||
+    metadataType === "task"
+  ) {
+    return metadataType;
+  }
+  return notification.task?.type ?? "task";
+}
+
+function getTaskTypeIcon(taskType: ReturnType<typeof getNotificationTaskType>) {
+  switch (taskType) {
     case "bug":
       return <Bug className="size-3.5 shrink-0 text-red-500" />;
     case "epic":
@@ -106,7 +144,7 @@ function getNotificationHeadline(
   notification: NotificationItem,
   actorName: string,
 ) {
-  const projectName = notification.project?.name;
+  const projectName = getNotificationProjectName(notification);
 
   switch (notification.type) {
     case "project_member_added":
@@ -144,37 +182,82 @@ function getNotificationHeadline(
       return `${actorName} moved a task`;
     }
     default:
-      return `${actorName} ${notification.title}`;
+      return `${actorName} updated Velora`;
   }
+}
+
+type NotificationGroup = {
+  key: string;
+  latest: NotificationItem;
+  updates: NotificationItem[];
+};
+
+function getNotificationGroupKey(notification: NotificationItem) {
+  return notification.task?.id ?? notification.project?.id ?? notification.id;
+}
+
+function groupNotifications(notifications: NotificationItem[]) {
+  const groups = new Map<string, NotificationGroup>();
+
+  for (const notification of notifications) {
+    const key = getNotificationGroupKey(notification);
+    const group = groups.get(key);
+
+    if (!group) {
+      groups.set(key, { key, latest: notification, updates: [] });
+      continue;
+    }
+
+    group.updates.push(notification);
+  }
+
+  return Array.from(groups.values());
 }
 function NotificationRow({
   notification,
   onOpen,
+  interactiveSurface = true,
 }: {
   notification: NotificationItem;
   onOpen: (notification: NotificationItem) => void;
+  interactiveSurface?: boolean;
 }) {
   const Icon = notificationIconByType[notification.type];
   const unread = !notification.readAt;
   const actorName = notification.actor?.name ?? "Velora";
   const headline = getNotificationHeadline(notification, actorName);
   const taskColumnName = getNotificationColumnName(notification);
+  const taskCode = getNotificationTaskCode(notification);
+  const taskTitle = getNotificationTaskTitle(notification);
+  const taskType = getNotificationTaskType(notification);
+  const projectName = getNotificationProjectName(notification);
+
+  const surfaceClass = interactiveSurface
+    ? "hover:bg-muted/80 dark:hover:bg-muted/70"
+    : "";
 
   return (
     <button
       type="button"
       onClick={() => onOpen(notification)}
-      className="group flex w-full cursor-pointer gap-3 px-6 py-4 text-left transition-colors hover:bg-muted/35"
+      className={`group flex w-full cursor-pointer gap-3 rounded-md px-2 py-3 text-left transition-colors ${surfaceClass}`}
     >
-      <Avatar className="mt-0.5 h-10 w-10 border border-border/50 shadow-sm">
+      <Avatar className="relative z-20 mt-0.5 h-10 w-10 border border-border/50 shadow-sm">
         <AvatarImage
           src={notification.actor ? getUserAvatarUrl(notification.actor) : ""}
         />
         <AvatarFallback
           className={
             notification.actor
-              ? "bg-primary/10 text-xs font-semibold text-primary"
+              ? "text-xs font-semibold text-white"
               : "bg-muted text-muted-foreground"
+          }
+          style={
+            notification.actor
+              ? {
+                  backgroundColor: `#${getUserAvatarColor(notification.actor.name)}`,
+                }
+              : undefined
           }
         >
           {notification.actor ? (
@@ -196,29 +279,36 @@ function NotificationRow({
                 {getRelativeTime(notification.createdAt)}
               </span>
             </div>
-            {notification.task ? (
+            {taskTitle || taskCode ? (
               <div className="mt-1 space-y-0.5">
                 <div className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-foreground/80">
-                  {getTaskTypeIcon(notification.task)}
+                  {getTaskTypeIcon(taskType)}
                   <span className="truncate group-hover:underline group-hover:underline-offset-2">
-                    {notification.task.title}
+                    {taskTitle ?? taskCode}
                   </span>
                 </div>
-                <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                  <span className="shrink-0 font-medium">
-                    {notification.task.code}
+                <div className="flex min-w-0 items-center gap-1.5 text-xs leading-none text-muted-foreground">
+                  <span className="relative top-[1px] shrink-0 font-medium leading-none">
+                    {taskCode}
                   </span>
                   {taskColumnName ? (
                     <>
-                      <span aria-hidden="true">•</span>
-                      <span className="truncate">{taskColumnName}</span>
+                      <span
+                        aria-hidden="true"
+                        className="flex h-3 shrink-0 items-center text-sm font-semibold leading-none"
+                      >
+                        {"•"}
+                      </span>
+                      <span className="relative top-[1px] truncate leading-none">
+                        {taskColumnName}
+                      </span>
                     </>
                   ) : null}
                 </div>
               </div>
-            ) : notification.project?.name ? (
+            ) : projectName ? (
               <div className="mt-0.5 truncate text-xs font-medium text-muted-foreground">
-                {notification.project.name}
+                {projectName}
               </div>
             ) : null}
           </div>
@@ -227,14 +317,178 @@ function NotificationRow({
           ) : null}
         </div>
 
-        {notification.type === "project_member_added" &&
-        notification.message ? (
+        {notification.type === "project_member_added" && projectName ? (
           <div className="rounded-sm border border-border/70 bg-background/80 px-3 py-2 text-sm leading-relaxed text-muted-foreground">
-            {notification.message}
+            You were added to {projectName}.
           </div>
         ) : null}
       </div>
     </button>
+  );
+}
+
+function NotificationUpdateRow({
+  notification,
+  onOpen,
+}: {
+  notification: NotificationItem;
+  onOpen: (notification: NotificationItem) => void;
+}) {
+  const Icon = notificationIconByType[notification.type];
+  const unread = !notification.readAt;
+  const actorName = notification.actor?.name ?? "Velora";
+  const headline = getNotificationHeadline(notification, actorName);
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(notification)}
+      className="group relative -mx-2 flex w-[calc(100%+1rem)] cursor-pointer gap-3 rounded-md px-2 py-3 text-left transition-colors hover:bg-muted/80 dark:hover:bg-muted/70"
+    >
+      <Avatar className="relative z-20 h-10 w-10 border border-border/50 bg-popover shadow-sm">
+        <AvatarImage
+          src={notification.actor ? getUserAvatarUrl(notification.actor) : ""}
+        />
+        <AvatarFallback
+          className={
+            notification.actor
+              ? "text-xs font-semibold text-white"
+              : "bg-muted text-muted-foreground"
+          }
+          style={
+            notification.actor
+              ? {
+                  backgroundColor: `#${getUserAvatarColor(notification.actor.name)}`,
+                }
+              : undefined
+          }
+        >
+          {notification.actor ? (
+            getUserInitials(notification.actor.name)
+          ) : (
+            <Icon className="size-4" />
+          )}
+        </AvatarFallback>
+      </Avatar>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-sm leading-snug">
+              <span className="min-w-0 font-medium text-foreground">
+                {headline}
+              </span>
+              <span className="shrink-0 text-muted-foreground">
+                {getRelativeTime(notification.createdAt)}
+              </span>
+            </div>
+          </div>
+          {unread ? (
+            <Circle className="mt-1.5 size-2 shrink-0 fill-primary text-primary" />
+          ) : null}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function NotificationGroupRow({
+  group,
+  expandedCount,
+  onOpen,
+  onShowMore,
+  onShowLess,
+}: {
+  group: NotificationGroup;
+  expandedCount: number;
+  onOpen: (notification: NotificationItem) => void;
+  onShowMore: (group: NotificationGroup) => void;
+  onShowLess: (group: NotificationGroup) => void;
+}) {
+  const visibleUpdates = group.updates.slice(0, expandedCount);
+  const hasExpandedAllUpdates = expandedCount >= group.updates.length;
+  const actorName = group.latest.actor?.name ?? "Velora";
+  const firstUpdateActor = group.updates[0]?.actor ?? group.latest.actor;
+
+  const isExpanded = expandedCount > 0;
+  const groupHoverClass = !isExpanded
+    ? "hover:bg-muted/80 dark:hover:bg-muted/70"
+    : "";
+
+  return (
+    <div
+      className={`group mx-4 rounded-md transition-colors ${groupHoverClass}`}
+    >
+      <div>
+        <NotificationRow
+          notification={group.latest}
+          onOpen={onOpen}
+          interactiveSurface={isExpanded}
+        />
+      </div>
+      {group.updates.length > 0 ? (
+        <div className="pb-3">
+          {expandedCount === 0 ? (
+            <button
+              type="button"
+              className="ml-[60px] flex cursor-pointer items-center gap-2 text-sm font-medium text-primary hover:underline hover:underline-offset-2"
+              onClick={() => onShowMore(group)}
+            >
+              <Avatar className="relative z-20 h-6 w-6 border border-border/50 shadow-sm">
+                <AvatarImage
+                  src={
+                    firstUpdateActor ? getUserAvatarUrl(firstUpdateActor) : ""
+                  }
+                />
+                <AvatarFallback
+                  className={
+                    firstUpdateActor
+                      ? "text-[9px] font-semibold text-white"
+                      : "bg-muted text-[9px] font-semibold text-muted-foreground"
+                  }
+                  style={
+                    firstUpdateActor
+                      ? {
+                          backgroundColor: `#${getUserAvatarColor(firstUpdateActor.name)}`,
+                        }
+                      : undefined
+                  }
+                >
+                  {firstUpdateActor
+                    ? getUserInitials(firstUpdateActor.name)
+                    : "VL"}
+                </AvatarFallback>
+              </Avatar>
+              <span>
+                +{group.updates.length} update
+                {group.updates.length === 1 ? "" : "s"} from {actorName}
+              </span>
+            </button>
+          ) : (
+            <div className="relative mt-2 px-2 before:pointer-events-none before:absolute before:bottom-11 before:left-7 before:top-[-32px] before:z-10 before:w-[3px] before:-translate-x-1/2 before:bg-border/70">
+              <div className="space-y-2">
+                {visibleUpdates.map((notification) => (
+                  <NotificationUpdateRow
+                    key={notification.id}
+                    notification={notification}
+                    onOpen={onOpen}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                className="ml-[60px] mt-2 cursor-pointer text-sm font-medium text-primary hover:underline hover:underline-offset-2"
+                onClick={() =>
+                  hasExpandedAllUpdates ? onShowLess(group) : onShowMore(group)
+                }
+              >
+                {hasExpandedAllUpdates ? "Show less" : "Show more"}
+              </button>
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -243,6 +497,9 @@ export function NotificationDropdown() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [activeTab, setActiveTab] = useState<"direct" | "watching">("direct");
+  const [expandedGroupCounts, setExpandedGroupCounts] = useState<
+    Record<string, number>
+  >({});
   const navigate = useNavigate();
   const notificationsQuery = useNotifications(
     1,
@@ -253,13 +510,22 @@ export function NotificationDropdown() {
   const markRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
 
-  const notifications = notificationsQuery.data?.data ?? [];
+  const notifications = useMemo(
+    () => notificationsQuery.data?.data ?? [],
+    [notificationsQuery.data?.data],
+  );
   const unreadCount = unreadCountQuery.data ?? 0;
   const isLoading = notificationsQuery.isLoading || unreadCountQuery.isLoading;
-  const visibleNotifications = notifications.filter(() => {
-    if (activeTab === "watching") return false;
-    return true;
-  });
+  const visibleNotifications = useMemo(() => {
+    return notifications.filter(() => {
+      if (activeTab === "watching") return false;
+      return true;
+    });
+  }, [activeTab, notifications]);
+  const visibleNotificationGroups = useMemo(
+    () => groupNotifications(visibleNotifications),
+    [visibleNotifications],
+  );
 
   const handleOpenNotification = (notification: NotificationItem) => {
     if (!notification.readAt) {
@@ -281,12 +547,32 @@ export function NotificationDropdown() {
     });
   };
 
+  const handleShowMoreGroupUpdates = (group: NotificationGroup) => {
+    setExpandedGroupCounts((previous) => ({
+      ...previous,
+      [group.key]: Math.min(
+        group.updates.length,
+        (previous[group.key] ?? 0) + 4,
+      ),
+    }));
+  };
+
+  const handleShowLessGroupUpdates = (group: NotificationGroup) => {
+    setExpandedGroupCounts((previous) => ({
+      ...previous,
+      [group.key]: 0,
+    }));
+  };
+
   return (
     <Popover
       open={open}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
-        if (!nextOpen) setMoreOpen(false);
+        if (!nextOpen) {
+          setMoreOpen(false);
+          setExpandedGroupCounts({});
+        }
       }}
     >
       <PopoverTrigger asChild>
@@ -383,7 +669,7 @@ export function NotificationDropdown() {
             </div>
           </div>
 
-          <div className="sticky top-0 z-10 border-b border-border/70 bg-popover px-6 pt-5">
+          <div className="sticky top-0 z-30 border-b border-border/70 bg-popover px-6 pt-5">
             <div className="flex items-end gap-5">
               <button
                 type="button"
@@ -432,12 +718,15 @@ export function NotificationDropdown() {
               <div className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Latest
               </div>
-              <div className="divide-y divide-border/70">
-                {visibleNotifications.map((notification) => (
-                  <NotificationRow
-                    key={notification.id}
-                    notification={notification}
+              <div className="space-y-2">
+                {visibleNotificationGroups.map((group) => (
+                  <NotificationGroupRow
+                    key={group.key}
+                    group={group}
+                    expandedCount={expandedGroupCounts[group.key] ?? 0}
                     onOpen={handleOpenNotification}
+                    onShowMore={handleShowMoreGroupUpdates}
+                    onShowLess={handleShowLessGroupUpdates}
                   />
                 ))}
               </div>

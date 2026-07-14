@@ -31,12 +31,10 @@ export interface NotificationItem {
   actor: NotificationUserSummary | null;
   createdAt: string;
   id: string;
-  message: string;
   metadata: Record<string, unknown> | null;
   project: NotificationProjectSummary | null;
   readAt: string | null;
   task: NotificationTaskSummary | null;
-  title: string;
   type: NotificationType;
 }
 

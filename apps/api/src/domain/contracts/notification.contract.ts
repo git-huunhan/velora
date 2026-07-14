@@ -1,4 +1,4 @@
-﻿import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { NotificationType, TaskType } from './enums';
 import { UserSummary } from './user.contract';
 
@@ -36,12 +36,6 @@ export class NotificationResponse {
 
   @ApiProperty({ enum: NotificationType })
   type!: NotificationType;
-
-  @ApiProperty({ example: 'Task assigned to you' })
-  title!: string;
-
-  @ApiProperty({ example: 'Alex Smith assigned PRJ1-125 to you.' })
-  message!: string;
 
   @ApiPropertyOptional({ nullable: true, type: UserSummary })
   actor!: UserSummary | null;

@@ -198,8 +198,6 @@ model Notification {
   projectId   String?         @db.Uuid
   taskId      String?         @db.Uuid
   type        NotificationType
-  title       String
-  message     String
   metadata    Json?
   readAt      DateTime?
   recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
@@ -212,6 +210,7 @@ model Notification {
   @@index([projectId, taskId])
   @@index([actorId])
 }
+
 
 
 

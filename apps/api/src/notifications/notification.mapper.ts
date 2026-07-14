@@ -47,7 +47,6 @@ export function toNotificationResponse(
     actor: notification.actor ? toUserSummary(notification.actor) : null,
     createdAt: notification.createdAt.toISOString(),
     id: notification.id,
-    message: notification.message,
     metadata: toMetadata(notification.metadata),
     project: notification.project
       ? {
@@ -66,7 +65,6 @@ export function toNotificationResponse(
           type: taskTypeToApi[notification.task.type],
         }
       : null,
-    title: notification.title,
     type: typeToApi[notification.type],
   };
 }
