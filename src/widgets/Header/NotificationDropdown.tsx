@@ -314,97 +314,102 @@ export function NotificationDropdown() {
       <PopoverContent
         align="end"
         sideOffset={10}
-        className="w-[560px] overflow-hidden p-0 shadow-xl"
+        className="w-[560px] max-w-[calc(100vw-32px)] gap-0 overflow-hidden p-0 shadow-xl"
       >
-        <div className="border-b border-border/70 px-6 pb-0 pt-6">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-                Notifications
-              </h2>
-              {unreadCount > 0 ? (
-                <Badge
-                  variant="secondary"
-                  className="bg-primary/10 text-xs text-primary hover:bg-primary/20"
-                >
-                  {unreadCount} new
-                </Badge>
-              ) : null}
-            </div>
+        <ScrollArea className="h-[clamp(0px,calc(var(--radix-popover-content-available-height)-64px),812px)] [&_[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:mt-[108px] [&_[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:!h-[calc(100%-108px)]">
+          <div className="px-6 pb-0 pt-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+                  Notifications
+                </h2>
+                {unreadCount > 0 ? (
+                  <Badge
+                    variant="secondary"
+                    className="bg-primary/10 text-xs text-primary hover:bg-primary/20"
+                  >
+                    {unreadCount} new
+                  </Badge>
+                ) : null}
+              </div>
 
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <label className="flex items-center gap-2 whitespace-nowrap">
-                <span>Only show unread</span>
-                <Switch checked={onlyUnread} onCheckedChange={setOnlyUnread} />
-              </label>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-full"
-                title="Open notifications"
-              >
-                <ExternalLink className="size-4" />
-              </Button>
-              <DropdownMenu
-                modal={false}
-                open={moreOpen}
-                onOpenChange={setMoreOpen}
-              >
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 rounded-full"
-                    title="More notification actions"
-                  >
-                    <MoreVertical className="size-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  sideOffset={8}
-                  className="w-44"
-                  onCloseAutoFocus={(event) => event.preventDefault()}
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <label className="flex items-center gap-2 whitespace-nowrap">
+                  <span>Only show unread</span>
+                  <Switch
+                    checked={onlyUnread}
+                    onCheckedChange={setOnlyUnread}
+                  />
+                </label>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-full"
+                  title="Open notifications"
                 >
-                  <DropdownMenuItem
-                    disabled={unreadCount === 0 || markAllRead.isPending}
-                    onClick={handleMarkAllRead}
+                  <ExternalLink className="size-4" />
+                </Button>
+                <DropdownMenu
+                  modal={false}
+                  open={moreOpen}
+                  onOpenChange={setMoreOpen}
+                >
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 rounded-full"
+                      title="More notification actions"
+                    >
+                      <MoreVertical className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    sideOffset={8}
+                    className="w-44"
+                    onCloseAutoFocus={(event) => event.preventDefault()}
                   >
-                    <Check className="mr-2 size-4" />
-                    Mark all read
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                    <DropdownMenuItem
+                      disabled={unreadCount === 0 || markAllRead.isPending}
+                      onClick={handleMarkAllRead}
+                    >
+                      <Check className="mr-2 size-4" />
+                      Mark all read
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
           </div>
 
-          <div className="mt-5 flex items-end gap-5">
-            <button
-              type="button"
-              onClick={() => setActiveTab("direct")}
-              className={`border-b-2 pb-2 text-sm font-medium transition-colors ${
-                activeTab === "direct"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Direct
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("watching")}
-              className={`border-b-2 pb-2 text-sm font-medium transition-colors ${
-                activeTab === "watching"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Watching
-            </button>
+          <div className="sticky top-0 z-10 border-b border-border/70 bg-popover px-6 pt-5">
+            <div className="flex items-end gap-5">
+              <button
+                type="button"
+                onClick={() => setActiveTab("direct")}
+                className={`border-b-2 pb-2 text-sm font-medium transition-colors ${
+                  activeTab === "direct"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Direct
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("watching")}
+                className={`border-b-2 pb-2 text-sm font-medium transition-colors ${
+                  activeTab === "watching"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Watching
+              </button>
+            </div>
           </div>
-        </div>
 
-        <ScrollArea className="h-[min(680px,calc(100vh-150px))]">
           {isLoading ? (
             <div className="space-y-5 p-6">
               {Array.from({ length: 4 }).map((_, index) => (
@@ -424,7 +429,7 @@ export function NotificationDropdown() {
             </div>
           ) : visibleNotifications.length > 0 ? (
             <div>
-              <div className="px-6 pt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <div className="px-6 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Latest
               </div>
               <div className="divide-y divide-border/70">
