@@ -127,14 +127,14 @@ const detailedCaseStudies = [
     proof: [
       "Project member dialog",
       "Add people flow",
-      "Owner/member roles",
+      "Administrator/Member/Viewer roles",
       "Removal cleanup",
     ],
     retrospective:
       "Membership touched more UI than expected. The useful rule became: every place that shows people should use the same avatar and membership source.",
     title: "Projects & Members",
     tradeoff:
-      "The first version keeps project roles simple. That made the interaction clear while leaving room for a deeper permission system in Saga 3.",
+      "Velora keeps roles intentionally simple: Administrator, Member and Viewer. That keeps the UX clear while backend capabilities and realtime access still enforce the real boundaries.",
     userFlow:
       "A project owner opens the member list, adds a teammate, sees them appear in assignment controls, then removes them with a clear cleanup warning.",
   },
@@ -170,7 +170,7 @@ const detailedCaseStudies = [
   {
     accent: "text-amber-500",
     architecture:
-      "The backend stores notification type, actor, recipient and metadata snapshots. Phase 16 adds WebSocket delivery as a signal layer while REST remains the source of truth.",
+      "The backend stores notification type, actor, recipient and metadata snapshots. WebSocket delivery acts as a signal layer while REST remains the source of truth.",
     decisions: [
       "Use snapshot metadata for task code, title and status so old notifications do not drift when the task later changes.",
       "Group repeated updates by task to reduce noise while preserving the timeline when expanded.",
@@ -238,7 +238,7 @@ const regressionStories = [
   {
     area: "Case study narrative",
     checks: [
-      "Open Case Study/Foundation after a major phase or saga changes product behavior.",
+      "Open Case Study/Foundation after a major product milestone changes behavior.",
       "Keep public stories free from private documentation paths.",
       "Update Product Narratives when a feature trade-off or proof point changes.",
     ],
@@ -420,7 +420,7 @@ export const NarrativeShell: Story = {
           <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
             <SectionHeading
               eyebrow="Velora case study system"
-              title="A repeatable story structure for Saga 1-2 features"
+              title="A repeatable story structure for core product features"
               description="This shell turns internal product notes into a public-facing story, then uses Storybook to show inspectable UI evidence."
             />
             <div className="grid w-full max-w-sm grid-cols-2 gap-3 text-sm">
@@ -469,9 +469,9 @@ export const NarrativeShell: Story = {
 
         <section className="space-y-5">
           <SectionHeading
-            eyebrow="Saga 1-2 feature set"
+            eyebrow="Core feature set"
             title="Case studies ready for product review"
-            description="15.5 fills the shell with concrete feature narratives while keeping private notes out of the public Storybook UI."
+            description="The shell turns concrete feature narratives into public-facing stories while keeping private notes out of the Storybook UI."
           />
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -558,7 +558,7 @@ export const FeatureMap: Story = {
         <SectionHeading
           eyebrow="Case study index"
           title="Feature story map"
-          description="A compact map for deciding which feature story to open or update after a large phase changes product behavior."
+          description="A compact map for deciding which feature story to open or update after a large product change."
         />
         <div className="grid gap-4 md:grid-cols-2">
           {featureCaseStudies.map((feature) => {
@@ -594,7 +594,7 @@ function ProductNarrativesStory() {
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-8 py-10">
         <section className="rounded-xl border border-border bg-card p-8 shadow-sm">
           <SectionHeading
-            eyebrow="Saga 1-2 case studies"
+            eyebrow="Core product case studies"
             title="Four product stories with implementation evidence"
             description="These cards present each feature as a product story: clear user problem, visible product decisions, credible engineering trade-offs and a short retrospective."
           />
@@ -621,9 +621,9 @@ export const RegressionChecklist: Story = {
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-8 py-10">
         <section className="rounded-xl border border-border bg-card p-8 shadow-sm">
           <SectionHeading
-            eyebrow="Phase handoff checklist"
+            eyebrow="Story handoff checklist"
             title="Stories to open after product or design changes"
-            description="This checklist keeps Storybook useful after each major phase. It names the stories that should be reviewed when a feature, token or interaction changes."
+            description="This checklist keeps Storybook useful after each major product update. It names the stories that should be reviewed when a feature, token or interaction changes."
           />
         </section>
 
