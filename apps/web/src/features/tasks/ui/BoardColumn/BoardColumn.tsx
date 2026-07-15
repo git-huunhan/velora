@@ -1,4 +1,4 @@
-import {
+﻿import {
   dropTargetForElements,
   monitorForElements,
 } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
@@ -275,7 +275,7 @@ export function BoardColumn({
   return (
     <div
       ref={columnRef}
-      className="group/column relative flex flex-col rounded-xl border border-neutral-300 bg-neutral-100 dark:border-border dark:bg-muted/50 min-w-70 w-70 shrink-0 mr-6 last:mr-0 pb-2"
+      className="group/column relative flex flex-col rounded-xl border border-neutral-300 bg-neutral-100 dark:border-border dark:bg-muted/50 min-w-70 w-70 shrink-0 mr-6 last:mr-0"
     >
       {isFirstColumn && (
         <div
@@ -378,7 +378,7 @@ export function BoardColumn({
       >
         <div
           ref={columnBodyRef}
-          className="relative flex flex-col p-3 min-h-full"
+          className="relative flex min-h-full flex-col p-3"
         >
           {columnDropIndicatorY !== null && (
             <div

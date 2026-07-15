@@ -1,4 +1,4 @@
-import { formatDistanceToNow } from "date-fns";
+﻿import { formatDistanceToNow } from "date-fns";
 import {
   Bell,
   Bug,
@@ -213,7 +213,7 @@ function groupNotifications(notifications: NotificationItem[]) {
 
   return Array.from(groups.values());
 }
-function NotificationRow({
+export function NotificationRow({
   notification,
   onOpen,
   interactiveSurface = true,
@@ -327,7 +327,7 @@ function NotificationRow({
   );
 }
 
-function NotificationUpdateRow({
+export function NotificationUpdateRow({
   notification,
   onOpen,
 }: {
@@ -392,7 +392,7 @@ function NotificationUpdateRow({
   );
 }
 
-function NotificationGroupRow({
+export function NotificationGroupRow({
   group,
   expandedCount,
   onOpen,
