@@ -198,6 +198,53 @@ const detailedCaseStudies = [
   },
 ];
 
+const regressionStories = [
+  {
+    area: "Identity and access",
+    checks: [
+      "Open Identity/Avatar after avatar token or user menu changes.",
+      "Open Foundation/Controls after button, input, select, tabs or dialog changes.",
+      "Run login/logout manually when AuthProvider or route guards change.",
+    ],
+    stories: "Identity/Avatar, Foundation/Controls",
+  },
+  {
+    area: "Project collaboration",
+    checks: [
+      "Open Product/Project Members after project member, owner or removal behavior changes.",
+      "Verify owner-first ordering, remove confirmation and avatar colors.",
+      "Check assignee/member data still matches project membership in the app.",
+    ],
+    stories: "Product/Project Members",
+  },
+  {
+    area: "Task workflow",
+    checks: [
+      "Open Product/Kanban Work Items after task type, card spacing, priority, column or drag behavior changes.",
+      "Check task, bug, epic, subtask and unassigned states in both themes.",
+      "Manually test drag/drop in the app when DnD or workflow API integration changes.",
+    ],
+    stories: "Product/Kanban Work Items",
+  },
+  {
+    area: "Notification UX",
+    checks: [
+      "Open Product/Notifications after notification copy, grouping, unread state or avatar changes.",
+      "Verify grouped updates, show more/show less, hover state and empty state.",
+      "Manually click a notification in the app when navigation metadata changes.",
+    ],
+    stories: "Product/Notifications",
+  },
+  {
+    area: "Case study narrative",
+    checks: [
+      "Open Case Study/Foundation after a major phase or saga changes product behavior.",
+      "Keep public stories free from private documentation paths.",
+      "Update Product Narratives when a feature trade-off or proof point changes.",
+    ],
+    stories: "Case Study/Foundation",
+  },
+];
 const evidenceCards = [
   {
     icon: LayoutDashboard,
@@ -566,4 +613,47 @@ function ProductNarrativesStory() {
 export const RecruiterNarratives: Story = {
   name: "Product Narratives",
   render: () => <ProductNarrativesStory />,
+};
+
+export const RegressionChecklist: Story = {
+  render: () => (
+    <div className="min-h-screen bg-background text-foreground">
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-8 py-10">
+        <section className="rounded-xl border border-border bg-card p-8 shadow-sm">
+          <SectionHeading
+            eyebrow="Phase handoff checklist"
+            title="Stories to open after product or design changes"
+            description="This checklist keeps Storybook useful after each major phase. It names the stories that should be reviewed when a feature, token or interaction changes."
+          />
+        </section>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {regressionStories.map((item) => (
+            <article
+              key={item.area}
+              className="rounded-xl border border-border bg-card p-5 shadow-sm"
+            >
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                {item.area}
+              </p>
+              <h3 className="mt-2 font-semibold text-foreground">
+                {item.stories}
+              </h3>
+              <ul className="mt-4 space-y-2">
+                {item.checks.map((check) => (
+                  <li
+                    key={check}
+                    className="flex gap-2 text-sm leading-6 text-muted-foreground"
+                  >
+                    <CheckCircle2 className="mt-1 size-4 shrink-0 text-primary" />
+                    <span>{check}</span>
+                  </li>
+                ))}
+              </ul>
+            </article>
+          ))}
+        </div>
+      </main>
+    </div>
+  ),
 };
