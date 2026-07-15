@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+﻿import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -75,13 +75,12 @@ const statusToPrisma = {
 const roleToApi = {
   ADMIN: ApiProjectRole.ADMIN,
   MEMBER: ApiProjectRole.MEMBER,
-  OWNER: ApiProjectRole.OWNER,
+  OWNER: ApiProjectRole.ADMIN,
   VIEWER: ApiProjectRole.VIEWER,
 } as const;
 const roleToPrisma = {
-  [ApiProjectRole.ADMIN]: ProjectRole.ADMIN,
+  [ApiProjectRole.ADMIN]: ProjectRole.OWNER,
   [ApiProjectRole.MEMBER]: ProjectRole.MEMBER,
-  [ApiProjectRole.OWNER]: ProjectRole.OWNER,
   [ApiProjectRole.VIEWER]: ProjectRole.VIEWER,
 } as const;
 const priorityToPrisma = {

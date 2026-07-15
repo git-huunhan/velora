@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+﻿import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ProjectRole, ProjectStatus } from './enums';
 import { UserSummary } from './user.contract';
 
@@ -37,6 +37,35 @@ export class ProjectResponse {
   updatedAt!: string;
 }
 
+export class ProjectCapabilities {
+  @ApiProperty()
+  canReadProject!: boolean;
+
+  @ApiProperty()
+  canUpdateProject!: boolean;
+
+  @ApiProperty()
+  canDeleteProject!: boolean;
+
+  @ApiProperty()
+  canManageMembers!: boolean;
+
+  @ApiProperty()
+  canReadWorkItems!: boolean;
+
+  @ApiProperty()
+  canCreateWorkItems!: boolean;
+
+  @ApiProperty()
+  canUpdateWorkItems!: boolean;
+
+  @ApiProperty()
+  canDeleteWorkItems!: boolean;
+
+  @ApiProperty()
+  canManageWorkflow!: boolean;
+}
+
 export class ProjectMemberResponse {
   @ApiProperty({ format: 'uuid' })
   projectId!: string;
@@ -46,6 +75,9 @@ export class ProjectMemberResponse {
 
   @ApiProperty({ type: UserSummary })
   user!: UserSummary;
+
+  @ApiProperty({ type: ProjectCapabilities })
+  capabilities!: ProjectCapabilities;
 
   @ApiProperty({ default: 0 })
   affectedAssignedTaskCount!: number;

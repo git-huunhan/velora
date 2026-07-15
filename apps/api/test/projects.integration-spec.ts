@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+﻿import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
@@ -529,28 +529,28 @@ describe('Projects API integration', () => {
         ).toBe(1);
       });
 
-    const ownerId = await prisma.projectMember
-      .findFirstOrThrow({
-        where: { projectId, role: 'OWNER' },
-        select: { userId: true },
+    const ownerId = await prisma.user
+      .findUniqueOrThrow({
+        where: { email: ownerEmail },
+        select: { id: true },
       })
-      .then((member) => member.userId);
+      .then((user) => user.id);
+
+    await request(server)
+      .delete(`/api/v1/projects/${projectId}/members/${memberUserId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(204);
 
     await request(server)
       .patch(`/api/v1/projects/${projectId}/members/${ownerId}`)
       .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ role: 'admin' })
+      .send({ role: 'member' })
       .expect(400);
 
     await request(server)
       .delete(`/api/v1/projects/${projectId}/members/${ownerId}`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .expect(400);
-
-    await request(server)
-      .delete(`/api/v1/projects/${projectId}/members/${memberUserId}`)
-      .set('Authorization', `Bearer ${ownerToken}`)
-      .expect(204);
 
     await expect(
       prisma.projectMember.findUnique({

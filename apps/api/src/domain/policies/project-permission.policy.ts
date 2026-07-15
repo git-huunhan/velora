@@ -1,4 +1,4 @@
-import { ProjectRole } from '../contracts/enums';
+﻿import { ProjectRole } from '../contracts/enums';
 
 export enum ProjectPermission {
   READ_PROJECT = 'read_project',
@@ -13,17 +13,7 @@ export enum ProjectPermission {
 }
 
 const rolePermissions: Record<ProjectRole, ReadonlySet<ProjectPermission>> = {
-  [ProjectRole.OWNER]: new Set(Object.values(ProjectPermission)),
-  [ProjectRole.ADMIN]: new Set([
-    ProjectPermission.READ_PROJECT,
-    ProjectPermission.UPDATE_PROJECT,
-    ProjectPermission.MANAGE_MEMBERS,
-    ProjectPermission.READ_WORK_ITEMS,
-    ProjectPermission.CREATE_WORK_ITEMS,
-    ProjectPermission.UPDATE_WORK_ITEMS,
-    ProjectPermission.DELETE_WORK_ITEMS,
-    ProjectPermission.MANAGE_WORKFLOW,
-  ]),
+  [ProjectRole.ADMIN]: new Set(Object.values(ProjectPermission)),
   [ProjectRole.MEMBER]: new Set([
     ProjectPermission.READ_PROJECT,
     ProjectPermission.READ_WORK_ITEMS,
@@ -35,6 +25,12 @@ const rolePermissions: Record<ProjectRole, ReadonlySet<ProjectPermission>> = {
     ProjectPermission.READ_WORK_ITEMS,
   ]),
 };
+
+export function getProjectPermissions(
+  role: ProjectRole,
+): readonly ProjectPermission[] {
+  return [...rolePermissions[role]];
+}
 
 export function hasProjectPermission(
   role: ProjectRole,

@@ -1,4 +1,4 @@
-import {
+﻿import {
   AlertCircle,
   Calendar,
   ClipboardList,
@@ -45,6 +45,7 @@ import {
   PopoverClose,
 } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/features/auth/model/useAuth";
 import {
   getUserAvatarUrl,
   getUserInitials,
@@ -109,6 +110,7 @@ export default function ProjectDetailPage() {
     name: string;
     userId: string;
   } | null>(null);
+  const { user } = useAuth();
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const routeTaskId = searchParams.get("task");
@@ -133,11 +135,16 @@ export default function ProjectDetailPage() {
 
   const [listLayout, setListLayout] = useState<"table" | "split">("table");
 
-  const roleOrder = { owner: 0, admin: 1, member: 2, viewer: 3 } as const;
+  const roleOrder = { admin: 0, member: 1, viewer: 2 } as const;
   const sortedProjectMembers = [...(project?.members ?? [])].sort(
     (a, b) =>
       roleOrder[a.role] - roleOrder[b.role] || a.name.localeCompare(b.name),
   );
+  const currentProjectMember = project?.members?.find(
+    (member) => member.userId === user?.id,
+  );
+  const currentCapabilities = currentProjectMember?.capabilities;
+
   const assignedTaskCountByUserId = useMemo(() => {
     const counts = new Map<string, number>();
 
@@ -305,7 +312,10 @@ export default function ProjectDetailPage() {
                 {project.memberIds.length}
               </span>
             </Button>
-            <ProjectActionsMenu project={project} />
+            <ProjectActionsMenu
+              project={project}
+              capabilities={currentCapabilities}
+            />
             <Dialog open={isMembersOpen} onOpenChange={setIsMembersOpen}>
               <DialogContent className="top-[96px] translate-y-0 sm:max-w-sm p-0 gap-0 overflow-hidden">
                 <DialogHeader className="px-4 py-3 border-b text-left">
@@ -316,7 +326,9 @@ export default function ProjectDetailPage() {
                 </DialogHeader>
                 <div className="max-h-80 overflow-y-auto p-2 custom-scrollbar">
                   {sortedProjectMembers.map((member) => {
-                    const canRemoveMember = member.role !== "owner";
+                    const canRemoveMember =
+                      Boolean(currentCapabilities?.canManageMembers) &&
+                      member.role !== "admin";
 
                     return (
                       <div

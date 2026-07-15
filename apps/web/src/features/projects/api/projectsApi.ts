@@ -1,8 +1,9 @@
-import { apiRequest } from "@/shared/api/client";
+﻿import { apiRequest } from "@/shared/api/client";
 
 import type {
   PaginatedProjects,
   Project,
+  ProjectCapabilities,
   ProjectMember,
   ProjectMemberRole,
   ProjectStatus,
@@ -35,6 +36,7 @@ interface ApiProjectList {
 
 interface ApiProjectMember {
   affectedAssignedTaskCount?: number;
+  capabilities?: ProjectCapabilities;
   role: ProjectMemberRole;
   user: {
     avatarUrl: string | null;
@@ -65,9 +67,22 @@ function dateOnly(value?: string | null) {
   return value ? value.slice(0, 10) : "";
 }
 
+const defaultMemberCapabilities: ProjectCapabilities = {
+  canCreateWorkItems: false,
+  canDeleteProject: false,
+  canDeleteWorkItems: false,
+  canManageMembers: false,
+  canManageWorkflow: false,
+  canReadProject: true,
+  canReadWorkItems: true,
+  canUpdateProject: false,
+  canUpdateWorkItems: false,
+};
+
 function toProjectMember(member: ApiProjectMember): ProjectMember {
   return {
     affectedAssignedTaskCount: member.affectedAssignedTaskCount ?? 0,
+    capabilities: member.capabilities ?? defaultMemberCapabilities,
     avatarUrl: member.user.avatarUrl ?? undefined,
     name: member.user.name,
     role: member.role,

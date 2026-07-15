@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { Archive, Copy, MoreHorizontal, UserPlus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -44,10 +44,17 @@ import {
   useAddProjectMember,
   useArchiveProject,
   type Project,
+  type ProjectCapabilities,
 } from "@/features/projects";
 import { useUsers } from "@/features/users";
 
-export function ProjectActionsMenu({ project }: { project: Project }) {
+export function ProjectActionsMenu({
+  capabilities,
+  project,
+}: {
+  capabilities?: ProjectCapabilities;
+  project: Project;
+}) {
   const navigate = useNavigate();
   const archiveProject = useArchiveProject();
   const addProjectMember = useAddProjectMember();
@@ -63,6 +70,9 @@ export function ProjectActionsMenu({ project }: { project: Project }) {
     () => users.filter((user) => !memberIdSet.has(user.id)),
     [memberIdSet, users],
   );
+
+  const canManageMembers = Boolean(capabilities?.canManageMembers);
+  const canDeleteProject = Boolean(capabilities?.canDeleteProject);
 
   const copyProjectLink = async () => {
     try {
@@ -113,15 +123,19 @@ export function ProjectActionsMenu({ project }: { project: Project }) {
           <DropdownMenuItem onSelect={copyProjectLink}>
             <Copy /> Copy project link
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setIsAddMemberOpen(true)}>
-            <UserPlus /> Add member
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={archiveProject.isPending}
-            onSelect={() => setIsArchiveOpen(true)}
-          >
-            <Archive /> Archive project
-          </DropdownMenuItem>
+          {canManageMembers ? (
+            <DropdownMenuItem onSelect={() => setIsAddMemberOpen(true)}>
+              <UserPlus /> Add member
+            </DropdownMenuItem>
+          ) : null}
+          {canDeleteProject ? (
+            <DropdownMenuItem
+              disabled={archiveProject.isPending}
+              onSelect={() => setIsArchiveOpen(true)}
+            >
+              <Archive /> Archive project
+            </DropdownMenuItem>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
 

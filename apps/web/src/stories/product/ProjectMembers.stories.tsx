@@ -28,21 +28,48 @@ import {
 } from "@/features/auth/model/userAvatar";
 import type { ProjectMember } from "@/features/projects/model/types";
 
+const administratorCapabilities = {
+  canCreateWorkItems: true,
+  canDeleteProject: true,
+  canDeleteWorkItems: true,
+  canManageMembers: true,
+  canManageWorkflow: true,
+  canReadProject: true,
+  canReadWorkItems: true,
+  canUpdateProject: true,
+  canUpdateWorkItems: true,
+};
+
+const memberCapabilities = {
+  canCreateWorkItems: true,
+  canDeleteProject: false,
+  canDeleteWorkItems: false,
+  canManageMembers: false,
+  canManageWorkflow: false,
+  canReadProject: true,
+  canReadWorkItems: true,
+  canUpdateProject: false,
+  canUpdateWorkItems: true,
+};
+
 const members: ProjectMember[] = [
   {
     affectedAssignedTaskCount: 0,
+    capabilities: administratorCapabilities,
     name: "Admin Pro",
-    role: "owner",
+    role: "admin",
     userId: "user-admin",
   },
   {
     affectedAssignedTaskCount: 2,
+    capabilities: memberCapabilities,
     name: "Test User",
     role: "member",
     userId: "user-test",
   },
   {
     affectedAssignedTaskCount: 0,
+    capabilities: memberCapabilities,
     name: "Member Test",
     role: "member",
     userId: "user-member-test",
@@ -56,7 +83,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "Project membership states for owner ordering, member rows and remove confirmation copy when assigned work needs cleanup.",
+          "Project membership states for Administrator ordering, member rows and remove confirmation copy when assigned work needs cleanup.",
       },
     },
   },
@@ -101,7 +128,7 @@ function ProjectMembersDialog({
           </DialogHeader>
           <div className="max-h-80 overflow-y-auto p-2 custom-scrollbar">
             {members.map((member) => {
-              const canRemoveMember = member.role !== "owner";
+              const canRemoveMember = member.role !== "admin";
 
               return (
                 <div

@@ -1,10 +1,9 @@
-export enum UserRole {
+﻿export enum UserRole {
   ADMIN = 'admin',
   USER = 'user',
 }
 
 export enum ProjectRole {
-  OWNER = 'owner',
   ADMIN = 'admin',
   MEMBER = 'member',
   VIEWER = 'viewer',
