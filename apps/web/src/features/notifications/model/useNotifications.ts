@@ -1,4 +1,7 @@
+﻿import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { connectRealtimeSocket } from "@/shared/api/realtime";
 
 import {
   getNotifications,
@@ -7,6 +10,13 @@ import {
   markNotificationRead,
 } from "../api/notificationsApi";
 import type { NotificationItem, PaginatedNotifications } from "./types";
+
+interface NotificationCreatedEvent {
+  type: "notification.created";
+  payload: {
+    notification: NotificationItem;
+  };
+}
 
 export const notificationKeys = {
   all: ["notifications"] as const,
@@ -55,9 +65,72 @@ function markReadInList(
   };
 }
 
+function addNotificationToList(
+  previous: PaginatedNotifications | undefined,
+  notification: NotificationItem,
+) {
+  if (!previous) return previous;
+  if (previous.data.some((item) => item.id === notification.id))
+    return previous;
+
+  const pageSize = Math.max(previous.data.length, 1);
+
+  return {
+    ...previous,
+    data: [notification, ...previous.data].slice(0, pageSize),
+    totalCount: previous.totalCount + 1,
+  };
+}
+
 function adjustUnreadCount(previous: number | undefined, amount: number) {
   if (previous === undefined) return previous;
   return Math.max(0, previous + amount);
+}
+
+export function useNotificationRealtime() {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const socket = connectRealtimeSocket();
+    if (!socket) return;
+
+    const handleNotificationCreated = (event: NotificationCreatedEvent) => {
+      if (event.type !== "notification.created") return;
+
+      const notification = event.payload.notification;
+      let wasKnown = false;
+
+      queryClient.setQueriesData<PaginatedNotifications>(
+        { queryKey: notificationKeys.lists() },
+        (previous) => {
+          if (previous?.data.some((item) => item.id === notification.id)) {
+            wasKnown = true;
+          }
+          return addNotificationToList(previous, notification);
+        },
+      );
+
+      if (!wasKnown && !notification.readAt) {
+        queryClient.setQueryData<number>(notificationKeys.count(), (previous) =>
+          adjustUnreadCount(previous, 1),
+        );
+      }
+    };
+
+    const refetchOnReconnect = () => {
+      void queryClient.invalidateQueries({ queryKey: notificationKeys.all });
+    };
+
+    socket.on("realtime.event", handleNotificationCreated);
+    socket.on("connect", refetchOnReconnect);
+    socket.io.on("reconnect", refetchOnReconnect);
+
+    return () => {
+      socket.off("realtime.event", handleNotificationCreated);
+      socket.off("connect", refetchOnReconnect);
+      socket.io.off("reconnect", refetchOnReconnect);
+    };
+  }, [queryClient]);
 }
 
 export function useMarkNotificationRead() {

@@ -53,6 +53,7 @@ import {
   useProject,
   useRemoveProjectMember,
   useUpdateProject,
+  useProjectRealtime,
 } from "@/features/projects";
 import {
   BoardToolbar,
@@ -121,6 +122,7 @@ export default function ProjectDetailPage() {
   const { data: projectTasks = [] } = useTasksByProject(id || "");
   const updateProject = useUpdateProject();
   const removeProjectMember = useRemoveProjectMember();
+  useProjectRealtime(id || "");
 
   const [activeTab, setActiveTab] = useState("board");
 

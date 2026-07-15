@@ -44,6 +44,7 @@ import {
   type NotificationType,
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
+  useNotificationRealtime,
   useNotifications,
   useUnreadNotificationCount,
 } from "@/features/notifications";
@@ -417,7 +418,11 @@ export function NotificationGroupRow({
 
   return (
     <div
-      className={`group mx-4 rounded-md transition-colors ${groupHoverClass}`}
+      className={`group relative mx-4 rounded-md transition-colors ${
+        isExpanded
+          ? "before:pointer-events-none before:absolute before:bottom-11 before:left-7 before:top-8 before:z-10 before:w-[3px] before:-translate-x-1/2 before:bg-border/70"
+          : ""
+      } ${groupHoverClass}`}
     >
       <div>
         <NotificationRow
@@ -465,7 +470,7 @@ export function NotificationGroupRow({
               </span>
             </button>
           ) : (
-            <div className="relative mt-2 px-2 before:pointer-events-none before:absolute before:bottom-11 before:left-7 before:top-[-32px] before:z-10 before:w-[3px] before:-translate-x-1/2 before:bg-border/70">
+            <div className="relative mt-2 px-2">
               <div className="space-y-2">
                 {visibleUpdates.map((notification) => (
                   <NotificationUpdateRow
@@ -493,6 +498,7 @@ export function NotificationGroupRow({
 }
 
 export function NotificationDropdown() {
+  useNotificationRealtime();
   const [open, setOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [onlyUnread, setOnlyUnread] = useState(false);

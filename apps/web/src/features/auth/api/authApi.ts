@@ -1,9 +1,10 @@
-import {
+﻿import {
   apiRequest,
   clearAuthTokens,
   getRefreshToken,
   setAuthTokens,
 } from "@/shared/api/client";
+import { disconnectRealtimeSocket } from "@/shared/api/realtime";
 
 import type { User } from "../model/AuthContext";
 
@@ -20,6 +21,7 @@ interface AuthResponse {
 }
 
 export async function loginWithPassword(email: string, password: string) {
+  disconnectRealtimeSocket();
   clearAuthTokens();
 
   try {
@@ -49,5 +51,6 @@ export async function logoutSession() {
     }).catch(() => undefined);
   }
 
+  disconnectRealtimeSocket();
   clearAuthTokens();
 }

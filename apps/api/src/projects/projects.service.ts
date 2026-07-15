@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -24,6 +25,8 @@ import {
 import { validateMoveAnchors } from '../domain/policies/ordering.policy';
 import { PrismaService } from '../database/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
+import type { RealtimeEventType } from '../realtime/realtime.contract';
 import {
   NotificationType,
   ProjectRole,
@@ -123,7 +126,27 @@ export class ProjectsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly realtimeGateway: RealtimeGateway,
   ) {}
+
+  private emitProjectEvent(
+    type: RealtimeEventType,
+    actorId: string,
+    projectId: string,
+    payload: Record<string, unknown>,
+    taskId?: string,
+  ) {
+    this.realtimeGateway.emitToProject(projectId, {
+      actorId,
+      createdAt: new Date().toISOString(),
+      id: randomUUID(),
+      payload,
+      projectId,
+      taskId,
+      type,
+      version: 1,
+    });
+  }
 
   async listProjects(
     userId: string,
@@ -240,9 +263,15 @@ export class ProjectsService {
       data.avatarUrl = input.avatarUrl?.trim() || null;
     }
 
-    return toProjectResponse(
-      await this.prisma.project.update({ where: { id: projectId }, data }),
-    );
+    const updated = await this.prisma.project.update({
+      where: { id: projectId },
+      data,
+    });
+    this.emitProjectEvent('project.updated', userId, projectId, {
+      action: 'updated',
+      projectId,
+    });
+    return toProjectResponse(updated);
   }
 
   async archiveProject(
@@ -254,12 +283,15 @@ export class ProjectsService {
       projectId,
       ProjectPermission.DELETE_PROJECT,
     );
-    return toProjectResponse(
-      await this.prisma.project.update({
-        where: { id: projectId },
-        data: { archivedAt: new Date() },
-      }),
-    );
+    const archived = await this.prisma.project.update({
+      where: { id: projectId },
+      data: { archivedAt: new Date() },
+    });
+    this.emitProjectEvent('project.updated', userId, projectId, {
+      action: 'archived',
+      projectId,
+    });
+    return toProjectResponse(archived);
   }
 
   async unarchiveProject(
@@ -271,12 +303,15 @@ export class ProjectsService {
       projectId,
       ProjectPermission.DELETE_PROJECT,
     );
-    return toProjectResponse(
-      await this.prisma.project.update({
-        where: { id: projectId },
-        data: { archivedAt: null },
-      }),
-    );
+    const unarchived = await this.prisma.project.update({
+      where: { id: projectId },
+      data: { archivedAt: null },
+    });
+    this.emitProjectEvent('project.updated', userId, projectId, {
+      action: 'unarchived',
+      projectId,
+    });
+    return toProjectResponse(unarchived);
   }
 
   async listProjectMembers(
@@ -349,6 +384,10 @@ export class ProjectsService {
     ]);
 
     await this.notifyProjectMemberAdded(userId, input.userId, project);
+    this.emitProjectEvent('project.member_added', userId, projectId, {
+      memberUserId: input.userId,
+      projectId,
+    });
 
     return toProjectMemberResponse(member);
   }
@@ -372,13 +411,17 @@ export class ProjectsService {
       await this.assertProjectKeepsOwner(projectId);
     }
 
-    return toProjectMemberResponse(
-      await this.prisma.projectMember.update({
-        where: { projectId_userId: { projectId, userId: memberUserId } },
-        data: { role: roleToPrisma[input.role] },
-        include: { user: true },
-      }),
-    );
+    const updatedMember = await this.prisma.projectMember.update({
+      where: { projectId_userId: { projectId, userId: memberUserId } },
+      data: { role: roleToPrisma[input.role] },
+      include: { user: true },
+    });
+    this.emitProjectEvent('project.member_added', userId, projectId, {
+      action: 'role_updated',
+      memberUserId,
+      projectId,
+    });
+    return toProjectMemberResponse(updatedMember);
   }
 
   async removeProjectMember(
@@ -428,6 +471,11 @@ export class ProjectsService {
     });
 
     await this.notifyProjectMemberRemoved(userId, memberUserId, project);
+    this.emitProjectEvent('project.member_removed', userId, projectId, {
+      affectedTaskIds: assignedTasks.map((task) => task.id),
+      memberUserId,
+      projectId,
+    });
   }
 
   async listKanbanColumns(
@@ -461,16 +509,20 @@ export class ProjectsService {
       where: { projectId },
     });
     try {
-      return toKanbanColumnResponse(
-        await this.prisma.kanbanColumn.create({
-          data: {
-            isDone: input.isDone ?? false,
-            name,
-            projectId,
-            rank: columnRankAt(count),
-          },
-        }),
-      );
+      const createdColumn = await this.prisma.kanbanColumn.create({
+        data: {
+          isDone: input.isDone ?? false,
+          name,
+          projectId,
+          rank: columnRankAt(count),
+        },
+      });
+      this.emitProjectEvent('project.updated', userId, projectId, {
+        action: 'column_created',
+        columnId: createdColumn.id,
+        projectId,
+      });
+      return toKanbanColumnResponse(createdColumn);
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new ConflictException('A column with this name already exists.');
@@ -493,15 +545,19 @@ export class ProjectsService {
     await this.getKanbanColumnOrThrow(projectId, columnId);
 
     try {
-      return toKanbanColumnResponse(
-        await this.prisma.kanbanColumn.update({
-          where: { id: columnId },
-          data: {
-            ...(input.name !== undefined ? { name: input.name.trim() } : {}),
-            ...(input.isDone !== undefined ? { isDone: input.isDone } : {}),
-          },
-        }),
-      );
+      const updatedColumn = await this.prisma.kanbanColumn.update({
+        where: { id: columnId },
+        data: {
+          ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+          ...(input.isDone !== undefined ? { isDone: input.isDone } : {}),
+        },
+      });
+      this.emitProjectEvent('project.updated', userId, projectId, {
+        action: 'column_updated',
+        columnId,
+        projectId,
+      });
+      return toKanbanColumnResponse(updatedColumn);
     } catch (error) {
       if (this.isUniqueConstraintError(error)) {
         throw new ConflictException('A column with this name already exists.');
@@ -578,6 +634,11 @@ export class ProjectsService {
       });
     });
 
+    this.emitProjectEvent('project.updated', userId, projectId, {
+      action: 'column_moved',
+      columnId,
+      projectId,
+    });
     return toKanbanColumnResponse(updated);
   }
 
@@ -604,6 +665,11 @@ export class ProjectsService {
     }
 
     await this.prisma.kanbanColumn.delete({ where: { id: columnId } });
+    this.emitProjectEvent('project.updated', userId, projectId, {
+      action: 'column_deleted',
+      columnId,
+      projectId,
+    });
   }
 
   async listTasks(
@@ -689,6 +755,13 @@ export class ProjectsService {
     });
     await this.notifyTaskAssigned(userId, null, task);
     await this.notifyTaskChildCreated(userId, parentId, task);
+    this.emitProjectEvent(
+      'task.updated',
+      userId,
+      projectId,
+      { action: 'created', taskId: task.id },
+      task.id,
+    );
     return toTaskResponse(task);
   }
 
@@ -785,6 +858,13 @@ export class ProjectsService {
 
     await this.notifyTaskAssigned(userId, existing.assigneeId, updated);
     await this.notifyTaskStatusChanged(userId, existing, updated);
+    this.emitProjectEvent(
+      'task.updated',
+      userId,
+      projectId,
+      { action: 'updated', taskId: updated.id },
+      updated.id,
+    );
     return toTaskResponse(updated);
   }
 
@@ -895,6 +975,18 @@ export class ProjectsService {
     });
 
     await this.notifyTaskStatusChanged(userId, movingTask, moved);
+    this.emitProjectEvent(
+      'task.moved',
+      userId,
+      projectId,
+      {
+        action: 'moved',
+        targetColumnId: moved.columnId,
+        targetParentId: moved.parentId,
+        taskId: moved.id,
+      },
+      moved.id,
+    );
     return toTaskResponse(moved);
   }
 
@@ -950,6 +1042,13 @@ export class ProjectsService {
     });
 
     await this.notifyTaskCommented(userId, task);
+    this.emitProjectEvent(
+      'task.commented',
+      userId,
+      projectId,
+      { action: 'commented', commentId: comment.id, taskId },
+      taskId,
+    );
     return toCommentResponse(comment);
   }
 

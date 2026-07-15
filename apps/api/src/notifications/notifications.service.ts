@@ -1,8 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+﻿import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import type { NotificationType, Prisma } from '../generated/prisma/client';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 import type {
   NotificationReadAllResponse,
+  NotificationResponse,
   NotificationUnreadCountResponse,
 } from '../domain/contracts';
 import { toNotificationResponse } from './notification.mapper';
@@ -49,14 +51,17 @@ interface CreateNotificationForRecipientsInput extends Omit<
 }
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtimeGateway: RealtimeGateway,
+  ) {}
   async createForRecipient(
     input: CreateNotificationInput,
     client: Prisma.TransactionClient | PrismaService = this.prisma,
-  ): Promise<void> {
-    if (input.actorId && input.actorId === input.recipientId) return;
+  ): Promise<NotificationResponse | null> {
+    if (input.actorId && input.actorId === input.recipientId) return null;
 
-    await client.notification.create({
+    const notification = await client.notification.create({
       data: {
         actorId: input.actorId ?? null,
         metadata: input.metadata as Prisma.InputJsonValue | undefined,
@@ -65,7 +70,23 @@ export class NotificationsService {
         taskId: input.taskId ?? null,
         type: input.type,
       },
+      include: notificationInclude,
     });
+    const response = toNotificationResponse(notification);
+
+    this.realtimeGateway.emitToUser(input.recipientId, {
+      actorId: input.actorId ?? null,
+      createdAt: response.createdAt,
+      id: notification.id,
+      payload: { notification: response },
+      projectId: input.projectId ?? undefined,
+      recipientId: input.recipientId,
+      taskId: input.taskId ?? undefined,
+      type: 'notification.created',
+      version: 1,
+    });
+
+    return response;
   }
 
   async createForRecipients(
