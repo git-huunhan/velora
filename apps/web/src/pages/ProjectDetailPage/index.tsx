@@ -1,4 +1,4 @@
-﻿import {
+import {
   AlertCircle,
   Calendar,
   ClipboardList,
@@ -523,6 +523,7 @@ export default function ProjectDetailPage() {
         >
           <ListView
             projectId={project.id}
+            capabilities={currentCapabilities}
             searchQuery={listFilters.searchQuery}
             parentIds={listFilters.parentIds}
             assigneeIds={listFilters.assigneeIds}
@@ -543,6 +544,7 @@ export default function ProjectDetailPage() {
         >
           <KanbanBoard
             projectId={project.id}
+            capabilities={currentCapabilities}
             searchQuery={boardFilters.searchQuery}
             parentIds={boardFilters.parentIds}
             assigneeIds={boardFilters.assigneeIds}

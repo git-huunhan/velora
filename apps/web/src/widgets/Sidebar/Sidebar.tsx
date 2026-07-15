@@ -235,14 +235,16 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                       </div>
                     </div>
                     <div className="p-1.5">
-                      <Link
-                        to="/projects"
-                        onClick={onNavClick}
-                        className="flex items-center gap-3 px-2 py-1.5 hover:bg-accent text-[13.5px] font-medium text-muted-foreground hover:text-foreground rounded-md cursor-pointer transition-colors"
-                      >
-                        <ListFilter className="w-4 h-4" />
-                        View all spaces
-                      </Link>
+                      <PopoverClose asChild>
+                        <Link
+                          to="/projects"
+                          onClick={onNavClick}
+                          className="flex items-center gap-3 px-2 py-1.5 hover:bg-accent text-[13.5px] font-medium text-muted-foreground hover:text-foreground rounded-md cursor-pointer transition-colors"
+                        >
+                          <ListFilter className="w-4 h-4" />
+                          View all spaces
+                        </Link>
+                      </PopoverClose>
                     </div>
                   </PopoverContent>
                 </Popover>
@@ -281,14 +283,16 @@ function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
                     </div>
                   </div>
                   <div className="p-1.5">
-                    <Link
-                      to="/projects"
-                      onClick={onNavClick}
-                      className="flex items-center gap-3 px-2 py-1.5 hover:bg-accent text-[13.5px] font-medium text-muted-foreground hover:text-foreground rounded-md cursor-pointer transition-colors"
-                    >
-                      <ListFilter className="w-4 h-4" />
-                      View all spaces
-                    </Link>
+                    <PopoverClose asChild>
+                      <Link
+                        to="/projects"
+                        onClick={onNavClick}
+                        className="flex items-center gap-3 px-2 py-1.5 hover:bg-accent text-[13.5px] font-medium text-muted-foreground hover:text-foreground rounded-md cursor-pointer transition-colors"
+                      >
+                        <ListFilter className="w-4 h-4" />
+                        View all spaces
+                      </Link>
+                    </PopoverClose>
                   </div>
                 </PopoverContent>
               </Popover>

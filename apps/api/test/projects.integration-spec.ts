@@ -1,4 +1,4 @@
-﻿import { INestApplication } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
@@ -586,6 +586,107 @@ describe('Projects API integration', () => {
     ).resolves.toBeTruthy();
   });
 
+  it('enforces viewer and member project permissions', async () => {
+    const permissionProject = await createProject(
+      `${key}R`,
+      'Permission Scope',
+    );
+
+    try {
+      await request(server)
+        .post(`/api/v1/projects/${permissionProject.id}/members`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ role: 'viewer', userId: memberUserId })
+        .expect(201);
+
+      const columnsResponse = await request(server)
+        .get(`/api/v1/projects/${permissionProject.id}/columns`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .expect(200);
+      const todoColumn = (columnsResponse.body as KanbanColumnListResponse)
+        .data[0];
+
+      await request(server)
+        .get(`/api/v1/projects/${permissionProject.id}/tasks`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .expect(200);
+
+      await request(server)
+        .patch(`/api/v1/projects/${permissionProject.id}`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({ name: 'Viewer cannot update project' })
+        .expect(403);
+
+      await request(server)
+        .post(`/api/v1/projects/${permissionProject.id}/columns`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({ name: 'Viewer Column' })
+        .expect(403);
+
+      await request(server)
+        .post(`/api/v1/projects/${permissionProject.id}/tasks`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({ columnId: todoColumn.id, title: 'Viewer task', type: 'task' })
+        .expect(403);
+
+      await request(server)
+        .patch(
+          `/api/v1/projects/${permissionProject.id}/members/${memberUserId}`,
+        )
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ role: 'member' })
+        .expect(200);
+
+      const createdTaskResponse = await request(server)
+        .post(`/api/v1/projects/${permissionProject.id}/tasks`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({ columnId: todoColumn.id, title: 'Member task', type: 'task' })
+        .expect(201);
+      const createdTask = createdTaskResponse.body as TaskResponse;
+
+      await request(server)
+        .patch(
+          `/api/v1/projects/${permissionProject.id}/tasks/${createdTask.id}`,
+        )
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({ title: 'Member task updated' })
+        .expect(200);
+
+      await request(server)
+        .post(
+          `/api/v1/projects/${permissionProject.id}/tasks/${createdTask.id}/comments`,
+        )
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({ body: 'Member can comment.' })
+        .expect(201);
+
+      await request(server)
+        .post(`/api/v1/projects/${permissionProject.id}/members`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({ role: 'viewer', userId: memberUserId })
+        .expect(403);
+
+      await request(server)
+        .post(`/api/v1/projects/${permissionProject.id}/columns`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .send({ name: 'Member Column' })
+        .expect(403);
+
+      await request(server)
+        .post(`/api/v1/projects/${permissionProject.id}/archive`)
+        .set('Authorization', `Bearer ${memberToken}`)
+        .expect(403);
+
+      await request(server)
+        .delete(
+          `/api/v1/projects/${permissionProject.id}/tasks/${createdTask.id}`,
+        )
+        .set('Authorization', `Bearer ${memberToken}`)
+        .expect(403);
+    } finally {
+      await prisma.project.deleteMany({ where: { id: permissionProject.id } });
+    }
+  });
   it('allows the same user to belong to multiple projects', async () => {
     const firstProject = await createProject(`${key}A`, 'Member Scope A');
     const secondProject = await createProject(`${key}B`, 'Member Scope B');

@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
   useMemo,
   useState,
   useEffect,
@@ -26,6 +26,7 @@ import {
   SquaresExclude,
   User,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
   DndContext,
   closestCenter,
@@ -78,12 +79,13 @@ import {
   useCreateTask,
 } from "../../model/useTasks";
 import { useProjectColumns } from "../../model/useWorkflow";
+import type { ProjectCapabilities } from "@/features/projects/model/types";
 import { mockUsers } from "@/features/users/model/mockUsers";
 import { PriorityIcon } from "../PriorityIcon";
 import { TaskDetailModal } from "../TaskDetailModal/TaskDetailModal";
 import { TaskDetailPanel } from "../TaskDetailModal/components/TaskDetailPanel";
 import { BulkEditPanel } from "./components/BulkEditPanel";
-import type { Task, TaskStatus } from "../../model/types";
+import type { Task, TaskStatus, TaskUpdateData } from "../../model/types";
 import type { User as UserModel } from "@/features/users/model/types";
 import {
   useQuickCreateDraft,
@@ -346,7 +348,9 @@ interface SortableTableRowProps {
   onSetEditDueDateValue: (value: string) => void;
   onDueDateInputRef: (id: string, input: HTMLInputElement | null) => void;
   onOpenDueDatePicker: (id: string) => void;
-  updateTask: ReturnType<typeof useUpdateTask>;
+  updateTask: {
+    mutate: (variables: { taskId: string; data: TaskUpdateData }) => void;
+  };
   isLastRow: boolean;
   onInlineCreate: (id: string) => void;
   isInlineCreateOpen: boolean;
@@ -909,6 +913,7 @@ interface ListViewProps {
   headerSlot?: React.ReactNode;
   initialTaskId?: string | null;
   onInitialTaskOpen?: () => void;
+  capabilities?: ProjectCapabilities;
 }
 
 export function ListView({
@@ -924,6 +929,7 @@ export function ListView({
   headerSlot,
   initialTaskId,
   onInitialTaskOpen,
+  capabilities,
 }: ListViewProps) {
   const { data: tasks = [] } = useTasksByProject(projectId);
   const { data: columns = [] } = useProjectColumns(projectId);
@@ -946,6 +952,32 @@ export function ListView({
   }, []);
   const updateTask = useUpdateTask();
   const createTaskMutation = useCreateTask();
+  const canCreateWorkItems = Boolean(capabilities?.canCreateWorkItems);
+  const canUpdateWorkItems = Boolean(capabilities?.canUpdateWorkItems);
+
+  const guardedUpdateTask = useMemo(
+    () => ({
+      mutate: (variables: { taskId: string; data: TaskUpdateData }) => {
+        if (!canUpdateWorkItems) {
+          toast.error("You do not have permission to update work items.");
+          return;
+        }
+        updateTask.mutate(variables);
+      },
+    }),
+    [canUpdateWorkItems, updateTask],
+  );
+
+  const guardedCreateTask = useCallback(
+    (...args: Parameters<typeof createTaskMutation.mutate>) => {
+      if (!canCreateWorkItems) {
+        toast.error("You do not have permission to create work items.");
+        return;
+      }
+      createTaskMutation.mutate(...args);
+    },
+    [canCreateWorkItems, createTaskMutation],
+  );
 
   const [checkedTaskIds, setCheckedTaskIds] = useState<Set<string>>(new Set());
   const [isBulkEditing, setIsBulkEditing] = useState(false);
@@ -1089,7 +1121,7 @@ export function ListView({
 
   const handleTitleSubmit = (task: Task) => {
     if (editTitleValue.trim() && editTitleValue !== task.title) {
-      updateTask.mutate({
+      guardedUpdateTask.mutate({
         taskId: task.id,
         data: { title: editTitleValue.trim() },
       });
@@ -1426,7 +1458,7 @@ export function ListView({
                                       onSetEditDueDateValue={
                                         setEditDueDateValue
                                       }
-                                      updateTask={updateTask}
+                                      updateTask={guardedUpdateTask}
                                       isLastRow={
                                         index === orderedRenderList.length - 1
                                       }
@@ -1435,39 +1467,40 @@ export function ListView({
                                         inlineCreateRowId !== null
                                       }
                                     />
-                                    {inlineCreateRowId === task.id && (
-                                      <QuickCreateInput
-                                        onClose={() =>
-                                          setInlineCreateRowId(null)
-                                        }
-                                        containerWidth={containerWidth}
-                                        onCreate={(data) => {
-                                          createTaskMutation.mutate(
-                                            {
-                                              projectId,
-                                              parentId: task.parentId, // inherit the same parent, so it stays at the same level
-                                              afterTaskId: task.id, // insert after this task
-                                              title: data.title,
-                                              type: data.type,
-                                              assigneeId:
-                                                data.assigneeId ?? undefined,
-                                              dueDate:
-                                                data.dueDate ?? undefined,
-                                              status: "todo",
-                                              priority: "medium",
-                                            },
-                                            {
-                                              onSuccess: (newTask) => {
-                                                // move the inline create row under the newly created task
-                                                setInlineCreateRowId(
-                                                  newTask.id,
-                                                );
+                                    {canCreateWorkItems &&
+                                      inlineCreateRowId === task.id && (
+                                        <QuickCreateInput
+                                          onClose={() =>
+                                            setInlineCreateRowId(null)
+                                          }
+                                          containerWidth={containerWidth}
+                                          onCreate={(data) => {
+                                            guardedCreateTask(
+                                              {
+                                                projectId,
+                                                parentId: task.parentId, // inherit the same parent, so it stays at the same level
+                                                afterTaskId: task.id, // insert after this task
+                                                title: data.title,
+                                                type: data.type,
+                                                assigneeId:
+                                                  data.assigneeId ?? undefined,
+                                                dueDate:
+                                                  data.dueDate ?? undefined,
+                                                status: "todo",
+                                                priority: "medium",
                                               },
-                                            },
-                                          );
-                                        }}
-                                      />
-                                    )}
+                                              {
+                                                onSuccess: (newTask) => {
+                                                  // move the inline create row under the newly created task
+                                                  setInlineCreateRowId(
+                                                    newTask.id,
+                                                  );
+                                                },
+                                              },
+                                            );
+                                          }}
+                                        />
+                                      )}
                                   </React.Fragment>
                                 );
                               },
@@ -1479,12 +1512,12 @@ export function ListView({
                   </DndContext>
                 </div>
                 {/* Table Footer */}
-                {inlineCreateRowId === "bottom" ? (
+                {canCreateWorkItems && inlineCreateRowId === "bottom" ? (
                   <QuickCreateInput
                     asRow={false}
                     onClose={() => setInlineCreateRowId(null)}
                     onCreate={(data) => {
-                      createTaskMutation.mutate(
+                      guardedCreateTask(
                         {
                           projectId,
                           title: data.title,
@@ -1508,7 +1541,15 @@ export function ListView({
                       variant="ghost"
                       size="sm"
                       className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
-                      onClick={() => setInlineCreateRowId("bottom")}
+                      onClick={() => {
+                        if (!canCreateWorkItems) {
+                          toast.error(
+                            "You do not have permission to create work items.",
+                          );
+                          return;
+                        }
+                        setInlineCreateRowId("bottom");
+                      }}
                     >
                       <Plus className="w-4 h-4" /> Create
                     </Button>
@@ -1569,6 +1610,8 @@ export function ListView({
           isOpen={true}
           onClose={() => setSelectedTaskId(null)}
           columns={columns}
+          canUpdate={canUpdateWorkItems}
+          canCreate={canCreateWorkItems}
         />
       )}
 

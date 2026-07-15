@@ -18,6 +18,8 @@ interface TaskDetailModalProps {
   onDelete?: (task: Task) => void;
   onOpenTask?: (task: Task) => void;
   columns?: KanbanColumn[];
+  canUpdate?: boolean;
+  canCreate?: boolean;
 }
 
 export function TaskDetailModal({
@@ -27,6 +29,8 @@ export function TaskDetailModal({
   onDelete,
   onOpenTask,
   columns,
+  canUpdate = true,
+  canCreate = true,
 }: TaskDetailModalProps) {
   if (!task) return null;
 
@@ -51,6 +55,8 @@ export function TaskDetailModal({
           onDelete={onDelete}
           onOpenTask={onOpenTask}
           columns={columns}
+          canUpdate={canUpdate}
+          canCreate={canCreate}
           showCloseButton
         />
       </DialogContent>

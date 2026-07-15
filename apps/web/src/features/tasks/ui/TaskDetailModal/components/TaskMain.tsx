@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import {
   ChevronDown,
   GitFork,
@@ -40,6 +41,7 @@ import type {
   Task,
   TaskFieldUpdater,
   TaskStatus,
+  TaskUpdateData,
 } from "../../../model/types";
 import { TaskActivity } from "./TaskActivity";
 import { TaskSidebar } from "./TaskSidebar";
@@ -67,6 +69,8 @@ interface TaskMainProps {
   onOpenTask?: (task: Task) => void;
   className?: string;
   columns?: KanbanColumn[];
+  canCreate?: boolean;
+  canUpdate?: boolean;
 }
 
 export function TaskMain({
@@ -75,6 +79,8 @@ export function TaskMain({
   onOpenTask,
   className,
   columns,
+  canCreate = true,
+  canUpdate = true,
 }: TaskMainProps) {
   const { data: tasks = [] } = useTasksByProject(task.projectId);
   const { data: project } = useProject(task.projectId);
@@ -133,6 +139,25 @@ export function TaskMain({
   const { mutate: createSubtask, isPending: isCreatingSubtask } =
     useCreateTask();
 
+  const guardedUpdateTask = (variables: {
+    taskId: string;
+    data: TaskUpdateData;
+  }) => {
+    if (!canUpdate) {
+      toast.error("You do not have permission to update work items.");
+      return;
+    }
+    updateTask(variables);
+  };
+
+  const guardedCreateSubtask: typeof createSubtask = (...args) => {
+    if (!canCreate) {
+      toast.error("You do not have permission to create work items.");
+      return;
+    }
+    createSubtask(...args);
+  };
+
   // Sync state when task opens/changes
   useEffect(() => {
     if (task) {
@@ -159,8 +184,16 @@ export function TaskMain({
           {/* Quick Actions */}
           <div className="flex items-center gap-2 mb-8 -ml-1">
             <Popover
-              open={isQuickActionsOpen}
-              onOpenChange={setIsQuickActionsOpen}
+              open={isQuickActionsOpen && canCreate}
+              onOpenChange={(open) => {
+                if (open && !canCreate) {
+                  toast.error(
+                    "You do not have permission to create work items.",
+                  );
+                  return;
+                }
+                setIsQuickActionsOpen(open);
+              }}
             >
               <PopoverTrigger asChild>
                 <Button
@@ -168,6 +201,7 @@ export function TaskMain({
                   size="icon"
                   className="h-8 w-8 bg-muted/20 border-border/60 hover:bg-muted/50 transition-colors shadow-sm text-muted-foreground"
                   title="Add or create related work"
+                  disabled={!canCreate}
                 >
                   <Plus className="w-4 h-4" />
                 </Button>
@@ -181,6 +215,12 @@ export function TaskMain({
                       {canHaveChildren && (
                         <CommandItem
                           onSelect={() => {
+                            if (!canCreate) {
+                              toast.error(
+                                "You do not have permission to create work items.",
+                              );
+                              return;
+                            }
                             setIsQuickActionsOpen(false);
                             setIsSubtaskFormOpen(true);
                             setTimeout(
@@ -647,7 +687,7 @@ export function TaskMain({
                                   editingSubtaskTitle.trim() &&
                                   editingSubtaskTitle !== st.title
                                 ) {
-                                  updateTask({
+                                  guardedUpdateTask({
                                     taskId: st.id,
                                     data: { title: editingSubtaskTitle.trim() },
                                   });
@@ -738,7 +778,7 @@ export function TaskMain({
                                   <CommandGroup>
                                     <CommandItem
                                       onSelect={() => {
-                                        updateTask({
+                                        guardedUpdateTask({
                                           taskId: st.id,
                                           data: { assigneeId: null },
                                         });
@@ -767,7 +807,7 @@ export function TaskMain({
                                       <CommandItem
                                         key={user.id}
                                         onSelect={() => {
-                                          updateTask({
+                                          guardedUpdateTask({
                                             taskId: st.id,
                                             data: { assigneeId: user.id },
                                           });
@@ -798,7 +838,7 @@ export function TaskMain({
                           <TaskStatusSelect
                             value={st.status}
                             onChange={(status: TaskStatus) => {
-                              updateTask({
+                              guardedUpdateTask({
                                 taskId: st.id,
                                 data: { status },
                               });
@@ -842,7 +882,7 @@ export function TaskMain({
                           subtaskTitle.trim() &&
                           !isCreatingSubtask
                         ) {
-                          createSubtask(
+                          guardedCreateSubtask(
                             {
                               title: subtaskTitle.trim(),
                               projectId: task.projectId,
@@ -902,7 +942,7 @@ export function TaskMain({
                         disabled={!subtaskTitle.trim() || isCreatingSubtask}
                         onClick={() => {
                           if (subtaskTitle.trim() && !isCreatingSubtask) {
-                            createSubtask(
+                            guardedCreateSubtask(
                               {
                                 title: subtaskTitle.trim(),
                                 projectId: task.projectId,
@@ -978,6 +1018,7 @@ export function TaskMain({
             taskId={task.id}
             columns={columns}
             tasks={tasks}
+            canComment={canUpdate}
           />
         </div>
       </div>

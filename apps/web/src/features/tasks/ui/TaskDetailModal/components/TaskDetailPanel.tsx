@@ -1,4 +1,5 @@
 import { useUpdateTask } from "@/features/tasks";
+import { toast } from "sonner";
 import type {
   KanbanColumn,
   Task,
@@ -19,6 +20,8 @@ interface TaskDetailPanelProps {
   showCloseButton?: boolean;
   isEmbedded?: boolean;
   columns?: KanbanColumn[];
+  canUpdate?: boolean;
+  canCreate?: boolean;
 }
 
 export function TaskDetailPanel({
@@ -29,12 +32,19 @@ export function TaskDetailPanel({
   showCloseButton,
   isEmbedded,
   columns,
+  canUpdate = true,
+  canCreate = true,
 }: TaskDetailPanelProps) {
   const updateTask = useUpdateTask();
 
   if (!task) return null;
 
   const handleUpdate: TaskFieldUpdater = (field, value) => {
+    if (!canUpdate) {
+      toast.error("You do not have permission to update work items.");
+      return;
+    }
+
     const isArrayField = Array.isArray(value);
     if (!isArrayField && task[field] === value) return;
     updateTask.mutate({
@@ -60,6 +70,8 @@ export function TaskDetailPanel({
           handleUpdate={handleUpdate}
           onOpenTask={onOpenTask}
           columns={columns}
+          canCreate={canCreate}
+          canUpdate={canUpdate}
           className="w-full flex-1 shrink-0 flex flex-col overflow-hidden border-r-0 lg:border-r border-border/40 bg-card"
         />
         <TaskSidebar

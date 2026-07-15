@@ -1,4 +1,4 @@
-﻿import {
+import {
   dropTargetForElements,
   monitorForElements,
 } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
@@ -33,6 +33,7 @@ interface BoardColumnProps {
   onDeleteColumn: (targetColumnId?: string) => Promise<void>;
   onColumnDragStart: () => void;
   onColumnDragEnd: () => void;
+  canManageColumn?: boolean;
   canReorderColumn: boolean;
   isColumnDragging: boolean;
   onColumnDragOver: (side: "before" | "after") => void;
@@ -64,6 +65,7 @@ export function BoardColumn({
   onDeleteColumn,
   onColumnDragStart,
   onColumnDragEnd,
+  canManageColumn = true,
   canReorderColumn,
   isColumnDragging,
   onColumnDragOver,
@@ -351,7 +353,9 @@ export function BoardColumn({
             />
           ) : (
             <span
-              onDoubleClick={() => setIsRenaming(true)}
+              onDoubleClick={() => {
+                if (canManageColumn) setIsRenaming(true);
+              }}
               className="min-w-0 truncate text-sm font-semibold text-foreground select-none"
               title={title}
             >
@@ -362,14 +366,16 @@ export function BoardColumn({
             {tasks.length}
           </span>
         </div>
-        <ColumnActionsMenu
-          column={column}
-          columns={columns}
-          taskCount={tasks.length}
-          onRename={() => setIsRenaming(true)}
-          onSetDone={onSetDoneColumn}
-          onDelete={onDeleteColumn}
-        />
+        {canManageColumn && (
+          <ColumnActionsMenu
+            column={column}
+            columns={columns}
+            taskCount={tasks.length}
+            onRename={() => setIsRenaming(true)}
+            onSetDone={onSetDoneColumn}
+            onDelete={onDeleteColumn}
+          />
+        )}
       </div>
 
       <div

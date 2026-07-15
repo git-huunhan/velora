@@ -3,6 +3,7 @@ import { toast } from "sonner";
 
 import { useAuth } from "@/features/auth/model/useAuth";
 import { getUserAvatarUrl } from "@/features/auth/model/userAvatar";
+import { ApiError } from "@/shared/api/client";
 
 import type { ActivityEntry, Comment } from "../model/types";
 import {
@@ -63,11 +64,16 @@ export function useCreateComment(taskId: string) {
       return { previous };
     },
 
-    onError: (_err, _body, ctx) => {
-      if (ctx?.previous) {
-        qc.setQueryData(commentKeys.byTask(taskId), ctx.previous);
-      }
-      toast.error("Failed to post comment");
+    onError: (err, _body, ctx) => {
+      qc.setQueryData(commentKeys.byTask(taskId), ctx?.previous ?? []);
+      toast.error("Comment was not posted", {
+        description:
+          err instanceof ApiError && err.status === 403
+            ? "You do not have permission to comment on this task."
+            : err instanceof Error
+              ? err.message
+              : "Please try again.",
+      });
     },
 
     onSuccess: () => {

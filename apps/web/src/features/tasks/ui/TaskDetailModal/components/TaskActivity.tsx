@@ -1,4 +1,5 @@
 import { formatDistanceToNow } from "date-fns";
+import { toast } from "sonner";
 import {
   ArrowRight,
   ChevronDown,
@@ -528,6 +529,7 @@ interface TaskActivityProps {
   taskId: string;
   columns?: KanbanColumn[];
   tasks?: Task[];
+  canComment?: boolean;
 }
 
 export function TaskActivity({
@@ -535,6 +537,7 @@ export function TaskActivity({
   taskId,
   columns = [],
   tasks = [],
+  canComment = true,
 }: TaskActivityProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("comments");
@@ -601,6 +604,12 @@ export function TaskActivity({
   const handleSubmit = () => {
     const body = comment.trim();
     if (!body) return;
+    if (!canComment) {
+      toast.error("Commenting is not available", {
+        description: "You do not have permission to comment on this task.",
+      });
+      return;
+    }
     postComment(body, { onSuccess: () => setComment("") });
   };
 
@@ -685,8 +694,13 @@ export function TaskActivity({
               <div className="flex-1 border border-border/60 rounded-xl overflow-hidden focus-within:border-primary focus-within:ring-1 focus-within:ring-primary/20 transition-all shadow-sm">
                 <Textarea
                   ref={textareaRef}
-                  placeholder="Add a comment..."
-                  className="border-0 focus-visible:ring-0 min-h-[70px] resize-none bg-card text-sm p-3"
+                  placeholder={
+                    canComment
+                      ? "Add a comment..."
+                      : "You can view comments, but cannot add new ones."
+                  }
+                  className="border-0 focus-visible:ring-0 min-h-[70px] resize-none bg-card text-sm p-3 disabled:cursor-not-allowed disabled:opacity-70"
+                  disabled={!canComment}
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   onKeyDown={(e) => {
@@ -706,7 +720,7 @@ export function TaskActivity({
                   <Button
                     size="sm"
                     className="h-7 text-xs font-semibold px-4"
-                    disabled={!comment.trim() || isPosting}
+                    disabled={!canComment || !comment.trim() || isPosting}
                     onClick={handleSubmit}
                   >
                     {isPosting ? (

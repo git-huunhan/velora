@@ -1,4 +1,4 @@
-﻿import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
+import { monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 
 import {
   Bug,
@@ -18,6 +18,7 @@ import {
   getUserAvatarUrl,
   getUserInitials,
 } from "@/features/auth/model/userAvatar";
+import type { ProjectCapabilities } from "@/features/projects/model/types";
 import { useUsers } from "@/features/users/model/useUsers";
 
 import {
@@ -114,6 +115,7 @@ interface KanbanBoardProps {
   headerSlot?: React.ReactNode;
   initialTaskId?: string | null;
   onInitialTaskOpen?: () => void;
+  capabilities?: ProjectCapabilities;
 }
 
 import { useViewSettingsStore } from "../../model/useViewSettingsStore";
@@ -240,6 +242,7 @@ export function KanbanBoard({
   headerSlot,
   initialTaskId,
   onInitialTaskOpen,
+  capabilities,
 }: KanbanBoardProps) {
   const { data: serverTaskData, isLoading } = useTasksByProject(projectId);
   const { users } = useUsers();
@@ -307,6 +310,15 @@ export function KanbanBoard({
   const updateTask = useUpdateTask();
   const moveTask = useMoveTask();
   const deleteTask = useDeleteTask();
+  const canCreateWorkItems = Boolean(capabilities?.canCreateWorkItems);
+  const canUpdateWorkItems = Boolean(capabilities?.canUpdateWorkItems);
+  const canDeleteWorkItems = Boolean(capabilities?.canDeleteWorkItems);
+  const canManageWorkflow = Boolean(capabilities?.canManageWorkflow);
+
+  const showPermissionError = useCallback(
+    (action: string) => toast.error(`You do not have permission to ${action}.`),
+    [],
+  );
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
 
@@ -632,6 +644,12 @@ export function KanbanBoard({
       isDraggingRef.current = false;
       setActiveId(null);
 
+      if (!canUpdateWorkItems) {
+        setLocalTasks(previousLocalTasksRef.current);
+        showPermissionError("move work items");
+        return;
+      }
+
       if (!targetData) {
         setLocalTasks(previousLocalTasksRef.current);
         return;
@@ -760,12 +778,15 @@ export function KanbanBoard({
       moveTask,
       serverTasks,
       updateTask,
+      canUpdateWorkItems,
+      showPermissionError,
     ],
   );
 
   useEffect(() => {
     return monitorForElements({
-      canMonitor: ({ source }) => source.data.entityType === "task-card",
+      canMonitor: ({ source }) =>
+        canUpdateWorkItems && source.data.entityType === "task-card",
       onDragStart: ({ source }) => {
         const taskId = String(source.data.taskId ?? "");
         if (!taskId) return;
@@ -788,7 +809,12 @@ export function KanbanBoard({
         persistDroppedTask(taskId, target?.data);
       },
     });
-  }, [captureDraggingGroups, localTasks, persistDroppedTask]);
+  }, [
+    canUpdateWorkItems,
+    captureDraggingGroups,
+    localTasks,
+    persistDroppedTask,
+  ]);
   const handleCreate = (
     data: {
       title: string;
@@ -799,6 +825,11 @@ export function KanbanBoard({
     },
     lane?: { assigneeId?: string; parentId?: string },
   ) => {
+    if (!canCreateWorkItems) {
+      showPermissionError("create work items");
+      return;
+    }
+
     createTask.mutate(
       {
         title: data.title,
@@ -819,6 +850,11 @@ export function KanbanBoard({
   };
 
   const handleAddColumn = async () => {
+    if (!canManageWorkflow) {
+      showPermissionError("manage workflow columns");
+      return;
+    }
+
     const title = newColumnTitle.trim();
     if (!title) return;
     try {
@@ -835,11 +871,26 @@ export function KanbanBoard({
     (column: (typeof columns)[number], instanceKey: string) => ({
       column,
       columns,
-      onRenameColumn: (title: string) =>
-        updateColumn.mutate({ columnId: column.id, data: { title } }),
-      onSetDoneColumn: () =>
-        updateColumn.mutate({ columnId: column.id, data: { isDone: true } }),
+      canManageColumn: canManageWorkflow,
+      onRenameColumn: (title: string) => {
+        if (!canManageWorkflow) {
+          showPermissionError("manage workflow columns");
+          return;
+        }
+        updateColumn.mutate({ columnId: column.id, data: { title } });
+      },
+      onSetDoneColumn: () => {
+        if (!canManageWorkflow) {
+          showPermissionError("manage workflow columns");
+          return;
+        }
+        updateColumn.mutate({ columnId: column.id, data: { isDone: true } });
+      },
       onDeleteColumn: async (targetColumnId?: string) => {
+        if (!canManageWorkflow) {
+          showPermissionError("manage workflow columns");
+          return;
+        }
         if (targetColumnId) {
           const tasksToMove = localTasks.filter(
             (task) => task.status === column.id,
@@ -864,14 +915,14 @@ export function KanbanBoard({
         toast.success("Column deleted");
       },
       onColumnDragStart: () => setDraggedColumnId(column.id),
-      canReorderColumn: groupBy === "None",
+      canReorderColumn: canManageWorkflow && groupBy === "None",
       isColumnDragging: draggedColumnId !== null,
       onColumnDragEnd: () => {
         setDraggedColumnId(null);
         setColumnDropIndicator(null);
       },
       onColumnDragOver: (side: "before" | "after") => {
-        if (!draggedColumnId) return;
+        if (!canManageWorkflow || !draggedColumnId) return;
         const sourceIndex = columns.findIndex(
           (item) => item.id === draggedColumnId,
         );
@@ -891,7 +942,7 @@ export function KanbanBoard({
           ? columnDropIndicator.side
           : null,
       onColumnDrop: (side: "before" | "after") => {
-        if (!draggedColumnId) return;
+        if (!canManageWorkflow || !draggedColumnId) return;
         const ids = columns.map((item) => item.id);
         const from = ids.indexOf(draggedColumnId);
         const originalTargetIndex = ids.indexOf(column.id);
@@ -926,11 +977,17 @@ export function KanbanBoard({
       updateColumn,
       reorderColumns,
       groupBy,
+      canManageWorkflow,
+      showPermissionError,
     ],
   );
 
   const handleEdit = (data: TaskFormData) => {
     if (!editingTask) return;
+    if (!canUpdateWorkItems) {
+      showPermissionError("update work items");
+      return;
+    }
     updateTask.mutate(
       {
         taskId: editingTask.id,
@@ -947,6 +1004,10 @@ export function KanbanBoard({
   };
 
   const handleDelete = (task: Task) => {
+    if (!canDeleteWorkItems) {
+      showPermissionError("delete work items");
+      return;
+    }
     deleteTask.mutate(
       { taskId: task.id, projectId: task.projectId },
       {
@@ -961,6 +1022,10 @@ export function KanbanBoard({
 
   const handleCardUpdate = useCallback(
     (taskId: string, data: TaskUpdateData) => {
+      if (!canUpdateWorkItems) {
+        showPermissionError("update work items");
+        return;
+      }
       updateTask.mutate(
         { taskId, data },
         {
@@ -968,7 +1033,7 @@ export function KanbanBoard({
         },
       );
     },
-    [updateTask],
+    [canUpdateWorkItems, showPermissionError, updateTask],
   );
   const baseFilteredTasks = useMemo(
     () =>
@@ -1104,11 +1169,22 @@ export function KanbanBoard({
                                 title={col.title}
                                 tasks={columnTasks}
                                 onTaskClick={setSelectedTask}
-                                onTaskUpdate={handleCardUpdate}
-                                onTaskDelete={handleDelete}
+                                onTaskUpdate={
+                                  canUpdateWorkItems
+                                    ? handleCardUpdate
+                                    : undefined
+                                }
+                                onTaskDelete={
+                                  canDeleteWorkItems ? handleDelete : undefined
+                                }
                                 isFirstColumn={index === 0}
-                                onCreateTask={(data) =>
-                                  handleCreate(data, { assigneeId: groupId })
+                                onCreateTask={
+                                  canCreateWorkItems
+                                    ? (data) =>
+                                        handleCreate(data, {
+                                          assigneeId: groupId,
+                                        })
+                                    : undefined
                                 }
                               />
                             );
@@ -1146,11 +1222,20 @@ export function KanbanBoard({
                               title={col.title}
                               tasks={columnTasks}
                               onTaskClick={setSelectedTask}
-                              onTaskUpdate={handleCardUpdate}
-                              onTaskDelete={handleDelete}
+                              onTaskUpdate={
+                                canUpdateWorkItems
+                                  ? handleCardUpdate
+                                  : undefined
+                              }
+                              onTaskDelete={
+                                canDeleteWorkItems ? handleDelete : undefined
+                              }
                               isFirstColumn={index === 0}
-                              onCreateTask={(data) =>
-                                handleCreate(data, { parentId: groupId })
+                              onCreateTask={
+                                canCreateWorkItems
+                                  ? (data) =>
+                                      handleCreate(data, { parentId: groupId })
+                                  : undefined
                               }
                             />
                           );
@@ -1183,10 +1268,16 @@ export function KanbanBoard({
                             title={col.title}
                             tasks={columnTasks}
                             onTaskClick={setSelectedTask}
-                            onTaskUpdate={handleCardUpdate}
-                            onTaskDelete={handleDelete}
+                            onTaskUpdate={
+                              canUpdateWorkItems ? handleCardUpdate : undefined
+                            }
+                            onTaskDelete={
+                              canDeleteWorkItems ? handleDelete : undefined
+                            }
                             isFirstColumn={index === 0}
-                            onCreateTask={handleCreate}
+                            onCreateTask={
+                              canCreateWorkItems ? handleCreate : undefined
+                            }
                           />
                         );
                       })}
@@ -1211,41 +1302,44 @@ export function KanbanBoard({
                   title={col.title}
                   tasks={columnTasks}
                   onTaskClick={setSelectedTask}
-                  onTaskUpdate={handleCardUpdate}
-                  onTaskDelete={handleDelete}
+                  onTaskUpdate={
+                    canUpdateWorkItems ? handleCardUpdate : undefined
+                  }
+                  onTaskDelete={canDeleteWorkItems ? handleDelete : undefined}
                   isFirstColumn={index === 0}
-                  onCreateTask={handleCreate}
+                  onCreateTask={canCreateWorkItems ? handleCreate : undefined}
                 />
               );
             })}
             <div className="w-70 shrink-0">
-              {isAddingColumn ? (
-                <input
-                  autoFocus
-                  value={newColumnTitle}
-                  onChange={(event) => setNewColumnTitle(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") void handleAddColumn();
-                    if (event.key === "Escape") {
-                      setNewColumnTitle("");
-                      setIsAddingColumn(false);
-                    }
-                  }}
-                  onBlur={() => {
-                    if (!newColumnTitle.trim()) setIsAddingColumn(false);
-                  }}
-                  placeholder="Column name"
-                  className="h-10 w-full rounded-lg border border-primary bg-muted/50 px-3 text-sm font-medium outline-none ring-2 ring-primary/20 placeholder:text-muted-foreground"
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setIsAddingColumn(true)}
-                  className="flex h-10 w-full items-center gap-2 rounded-lg border border-dashed px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                >
-                  <Plus className="h-4 w-4" /> Add column
-                </button>
-              )}
+              {canManageWorkflow &&
+                (isAddingColumn ? (
+                  <input
+                    autoFocus
+                    value={newColumnTitle}
+                    onChange={(event) => setNewColumnTitle(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void handleAddColumn();
+                      if (event.key === "Escape") {
+                        setNewColumnTitle("");
+                        setIsAddingColumn(false);
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!newColumnTitle.trim()) setIsAddingColumn(false);
+                    }}
+                    placeholder="Column name"
+                    className="h-10 w-full rounded-lg border border-primary bg-muted/50 px-3 text-sm font-medium outline-none ring-2 ring-primary/20 placeholder:text-muted-foreground"
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingColumn(true)}
+                    className="flex h-10 w-full items-center gap-2 rounded-lg border border-dashed px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <Plus className="h-4 w-4" /> Add column
+                  </button>
+                ))}
             </div>
           </div>
         )}
@@ -1259,9 +1353,11 @@ export function KanbanBoard({
           setSelectedTask(null);
           setEditingTask(task);
         }}
-        onDelete={handleDelete}
+        onDelete={canDeleteWorkItems ? handleDelete : undefined}
         onOpenTask={setSelectedTask}
         columns={columns}
+        canUpdate={canUpdateWorkItems}
+        canCreate={canCreateWorkItems}
       />
 
       {/* Edit modal */}
