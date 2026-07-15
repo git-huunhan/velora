@@ -30,3 +30,4 @@ dist-ssr
 documentation/
 apps/api/src/generated/
 apps/api/openapi.json
+apps/web/storybook-static/

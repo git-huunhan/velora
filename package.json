@@ -25,7 +25,9 @@
     "db:migrate": "npm run db:migrate --workspace @velora/api",
     "db:seed": "npm run db:seed --workspace @velora/api",
     "db:studio": "npm run db:studio --workspace @velora/api",
-    "preview": "npm run preview --workspace @velora/web"
+    "preview": "npm run preview --workspace @velora/web",
+    "storybook": "npm run storybook --workspace @velora/web",
+    "build:storybook": "npm run build-storybook --workspace @velora/web"
   },
   "dependencies": {
     "@atlaskit/pragmatic-drag-and-drop": "^2.0.1",

@@ -1,4 +1,4 @@
-# Velora - Project & Team Management Dashboard
+﻿# Velora - Project & Team Management Dashboard
 
 > A modern, full-featured SaaS project management platform built as a monorepo with a React/Vite web app and a NestJS API.
 
@@ -33,6 +33,17 @@
 | Charts       | Recharts                        |
 | Database     | PostgreSQL + Prisma             |
 | Code quality | ESLint + Prettier               |
+
+---
+
+## Storybook, Design System & Case Study
+
+Velora includes a Storybook workspace for reviewing the product UI as a design system and portfolio case study. It documents reusable components, theme behavior, interaction states, and case-study narratives that help recruiters understand both the product thinking and the implementation quality.
+
+```bash
+npm run storybook
+npm run build:storybook
+```
 
 ---
 
@@ -92,6 +103,8 @@ The API runs at `http://localhost:3000/api/v1`.
 ```bash
 npm run lint:web        # Lint apps/web
 npm run build:web       # Build apps/web
+npm run storybook       # Run Storybook for apps/web
+npm run build:storybook # Build Storybook static output
 npm run lint:api        # Lint apps/api
 npm run build:api       # Build apps/api
 npm run docs:check      # Check documentation encoding/format guardrails
