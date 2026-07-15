@@ -11,6 +11,7 @@ import {
 } from '@nestjs/websockets';
 import type { Server, Socket } from 'socket.io';
 import type { AccessTokenPayload } from '../auth/auth.types';
+import { PrismaService } from '../database/prisma.service';
 import type {
   ProjectSubscriptionPayload,
   RealtimeAck,
@@ -36,6 +37,7 @@ export class RealtimeGateway
   constructor(
     private readonly jwtService: JwtService,
     private readonly registry: RealtimeRegistryService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async handleConnection(client: Socket): Promise<void> {
@@ -69,6 +71,15 @@ export class RealtimeGateway
       return { ok: false, error: 'INVALID_PROJECT_ID' };
     }
 
+    const connection = this.registry.getConnection(client.id);
+    const hasAccess = await this.hasProjectAccess(
+      connection.userId,
+      payload.projectId,
+    );
+    if (!hasAccess) {
+      return { ok: false, error: 'FORBIDDEN' };
+    }
+
     this.registry.subscribeProject(client.id, payload.projectId);
     await client.join(this.projectRoom(payload.projectId));
     return { ok: true };
@@ -97,6 +108,27 @@ export class RealtimeGateway
 
   emitToProject(projectId: string, event: RealtimeEvent): void {
     this.server.to(this.projectRoom(projectId)).emit('realtime.event', event);
+  }
+
+  removeUserFromProject(projectId: string, userId: string): void {
+    const socketIds = this.registry.unsubscribeUserFromProject(
+      userId,
+      projectId,
+    );
+    if (socketIds.length === 0) return;
+
+    this.server.in(socketIds).socketsLeave(this.projectRoom(projectId));
+  }
+
+  private async hasProjectAccess(
+    userId: string,
+    projectId: string,
+  ): Promise<boolean> {
+    const member = await this.prisma.projectMember.findUnique({
+      where: { projectId_userId: { projectId, userId } },
+      select: { userId: true },
+    });
+    return Boolean(member);
   }
 
   private async authenticate(client: Socket): Promise<AccessTokenPayload> {

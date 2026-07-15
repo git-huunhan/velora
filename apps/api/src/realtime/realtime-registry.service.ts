@@ -48,6 +48,19 @@ export class RealtimeRegistryService {
     return true;
   }
 
+  unsubscribeUserFromProject(userId: string, projectId: string): string[] {
+    const socketIds = this.getUserSocketIds(userId);
+    const removedSocketIds: string[] = [];
+
+    for (const socketId of socketIds) {
+      if (this.unsubscribeProject(socketId, projectId)) {
+        removedSocketIds.push(socketId);
+      }
+    }
+
+    return removedSocketIds;
+  }
+
   removeConnection(socketId: string): void {
     const connection = this.connections.get(socketId);
     if (!connection) return;

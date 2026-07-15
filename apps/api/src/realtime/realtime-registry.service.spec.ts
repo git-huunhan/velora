@@ -39,4 +39,26 @@ describe('RealtimeRegistryService', () => {
     expect(registry.getProjectSocketIds('project-1')).toEqual([]);
     expect(registry.getUserSocketIds('user-2')).toEqual(['socket-1']);
   });
+
+  it('removes all sockets for a user from a project subscription', () => {
+    registry.addConnection('socket-1', 'user-1');
+    registry.addConnection('socket-2', 'user-1');
+    registry.addConnection('socket-3', 'user-2');
+    registry.subscribeProject('socket-1', 'project-1');
+    registry.subscribeProject('socket-2', 'project-1');
+    registry.subscribeProject('socket-2', 'project-2');
+    registry.subscribeProject('socket-3', 'project-1');
+
+    expect(registry.unsubscribeUserFromProject('user-1', 'project-1')).toEqual([
+      'socket-1',
+      'socket-2',
+    ]);
+
+    expect(registry.getProjectSocketIds('project-1')).toEqual(['socket-3']);
+    expect(registry.getProjectSocketIds('project-2')).toEqual(['socket-2']);
+    expect(registry.getUserSocketIds('user-1')).toEqual([
+      'socket-1',
+      'socket-2',
+    ]);
+  });
 });

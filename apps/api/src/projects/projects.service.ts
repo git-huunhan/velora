@@ -470,6 +470,7 @@ export class ProjectsService {
     });
 
     await this.notifyProjectMemberRemoved(userId, memberUserId, project);
+    this.realtimeGateway.removeUserFromProject(projectId, memberUserId);
     this.emitProjectEvent('project.member_removed', userId, projectId, {
       affectedTaskIds: assignedTasks.map((task) => task.id),
       memberUserId,
