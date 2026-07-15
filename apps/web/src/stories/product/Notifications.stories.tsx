@@ -153,6 +153,22 @@ const notifications: NotificationItem[] = [
     task: null,
     type: "project_member_added",
   },
+  {
+    actor: actorAdmin,
+    createdAt: hoursAgo(31),
+    id: "notification-member-removed",
+    metadata: {
+      projectName: "Mobile App Updated",
+    },
+    project: {
+      id: "project-mobile",
+      key: "APP",
+      name: "Mobile App Updated",
+    },
+    readAt: null,
+    task: null,
+    type: "project_member_removed",
+  },
 ];
 
 const meta = {
@@ -162,7 +178,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "Notification states for the Activity Center: unread/read rows, task snapshots, grouped updates and empty state without calling the API.",
+          "Notification states for the Activity Center: unread/read rows, task snapshots, grouped task/project updates, realtime-ready cache behavior and empty state without calling the API.",
       },
     },
   },

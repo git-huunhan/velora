@@ -170,15 +170,15 @@ const detailedCaseStudies = [
   {
     accent: "text-amber-500",
     architecture:
-      "The backend stores notification type, actor, recipient and metadata snapshots. The frontend renders human-readable copy from those facts so old notifications stay meaningful.",
+      "The backend stores notification type, actor, recipient and metadata snapshots. Phase 16 adds WebSocket delivery as a signal layer while REST remains the source of truth.",
     decisions: [
       "Use snapshot metadata for task code, title and status so old notifications do not drift when the task later changes.",
       "Group repeated updates by task to reduce noise while preserving the timeline when expanded.",
-      "Mark read and unread filtering stay in the dropdown because a full notification page is not necessary yet.",
+      "Mark read, unread filtering and realtime delivery stay in the dropdown because a full notification page is not necessary yet.",
     ],
     icon: Bell,
     outcome:
-      "Velora now feels collaborative: assignment, comments, membership and task changes create readable notifications that lead back to the relevant task or project.",
+      "Velora now feels collaborative: assignment, comments, membership and task changes create readable realtime notifications that lead back to the relevant task or project.",
     problem:
       "Collaboration breaks down when users must inspect every project manually. Notifications needed to answer who did what, where it happened and whether it requires attention.",
     proof: [
@@ -192,7 +192,7 @@ const detailedCaseStudies = [
       "Notification copy mattered as much as the data model. Small wording changes made the experience feel less robotic and more like a teammate updating you.",
     title: "Notification Center",
     tradeoff:
-      "Polling and a dropdown-first interface keep the feature lightweight. Realtime delivery and a dedicated archive can arrive when notification volume proves the need.",
+      "WebSocket delivery improves freshness, while polling remains as a fallback. A dedicated archive page can still wait until notification volume proves the need.",
     userFlow:
       "A teammate changes a task, the recipient sees an unread badge, opens the dropdown, expands grouped updates, then clicks the task title to jump back into work.",
   },
