@@ -66,6 +66,8 @@ scripts/               # Repository maintenance scripts
 
 The web app follows Feature-Sliced Design boundaries while the API owns backend contracts, persistence, and integration tests.
 
+The local seed creates a portfolio-friendly demo workspace with project members, multiple roles, work items across all workflow columns, comments, activity records, and notifications. It is intended to make the product feel alive immediately after a fresh local setup.
+
 ---
 
 ## Getting Started
@@ -109,7 +111,7 @@ npm run lint:api        # Lint apps/api
 npm run build:api       # Build apps/api
 npm run docs:check      # Check documentation encoding/format guardrails
 npm run db:migrate      # Run Prisma migrations for the API
-npm run db:seed         # Seed focused local demo data
+npm run db:seed         # Seed portfolio demo data: project, members, tasks, activity, notifications
 ```
 
 ---

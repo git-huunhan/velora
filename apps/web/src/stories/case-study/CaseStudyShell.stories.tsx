@@ -1,4 +1,4 @@
-﻿import type { Meta, StoryObj } from "@storybook/react-vite";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import {
   Bell,
   Blocks,
@@ -239,7 +239,7 @@ const regressionStories = [
     area: "Case study narrative",
     checks: [
       "Open Case Study/Foundation after a major product milestone changes behavior.",
-      "Keep public stories free from private documentation paths.",
+      "Keep stories focused on product evidence instead of internal file paths.",
       "Update Product Narratives when a feature trade-off or proof point changes.",
     ],
     stories: "Case Study/Foundation",
@@ -275,7 +275,7 @@ const meta = {
     docs: {
       description: {
         component:
-          "A reusable case study shell for turning internal notes into polished Storybook narratives without duplicating long markdown content.",
+          "A reusable case study shell for turning product notes into polished Storybook narratives without duplicating long markdown content.",
       },
     },
   },
@@ -471,7 +471,7 @@ export const NarrativeShell: Story = {
           <SectionHeading
             eyebrow="Core feature set"
             title="Case studies ready for product review"
-            description="The shell turns concrete feature narratives into public-facing stories while keeping private notes out of the Storybook UI."
+            description="The shell turns concrete feature narratives into public-facing stories while keeping long-form source notes out of the Storybook UI."
           />
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -509,7 +509,7 @@ export const NarrativeShell: Story = {
           <SectionHeading
             eyebrow="Evidence model"
             title="What Storybook should show"
-            description="The story should stay visual and inspectable. Long prose remains in private notes; Storybook highlights the proof points."
+            description="The story should stay visual and inspectable. Long prose remains in source notes; Storybook highlights the proof points."
           />
 
           <div className="grid gap-4 md:grid-cols-4">
@@ -541,7 +541,7 @@ export const NarrativeShell: Story = {
                 Storybook should read from internal documentation first, then
                 inspect source code only when it needs exact component API or
                 behavior. Public stories should explain product decisions
-                without exposing private file structure.
+                without exposing repository-specific file structure.
               </p>
             </div>
           </div>
