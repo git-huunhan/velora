@@ -1,4 +1,4 @@
-﻿import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import {
   Bell,
   Bug,
@@ -420,7 +420,7 @@ export function NotificationGroupRow({
     <div
       className={`group relative mx-4 rounded-md transition-colors ${
         isExpanded
-          ? "before:pointer-events-none before:absolute before:bottom-11 before:left-7 before:top-8 before:z-10 before:w-[3px] before:-translate-x-1/2 before:bg-border/70"
+          ? "before:pointer-events-none before:absolute before:bottom-16 before:left-7 before:top-8 before:z-10 before:w-[3px] before:-translate-x-1/2 before:bg-border/70"
           : ""
       } ${groupHoverClass}`}
     >
