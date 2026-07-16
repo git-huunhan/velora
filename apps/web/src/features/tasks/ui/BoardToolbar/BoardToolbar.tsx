@@ -118,7 +118,7 @@ export function BoardToolbar({
   };
 
   return (
-    <div className="flex items-center justify-between min-h-[40px] pb-1 mt-1 shrink-0">
+    <div className="flex shrink-0 items-center justify-between">
       <div className="flex items-center gap-3">
         {/* Search */}
         <div className="relative group">

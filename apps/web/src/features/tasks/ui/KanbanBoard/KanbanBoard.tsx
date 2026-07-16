@@ -1100,15 +1100,17 @@ export function KanbanBoard({
     return (
       <div className="flex flex-col h-full overflow-hidden pt-0">
         {headerSlot}
-        <div className="flex flex-col flex-1 overflow-auto px-6 pt-0 pb-4 items-start">
-          <div className="flex gap-4 h-fit max-h-full min-h-0 animate-pulse">
-            {[1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="flex flex-col rounded-xl border border-neutral-300 bg-neutral-100 dark:border-border dark:bg-muted/50 min-w-70 w-70 h-[350px]"
-              />
-            ))}
-            <div className="w-6 shrink-0" />
+        <div className="flex flex-col flex-1 min-h-0 pt-4">
+          <div className="flex-1 min-h-0 overflow-auto custom-scrollbar pb-4">
+            <div className="flex gap-4 h-fit max-h-full min-h-0 animate-pulse px-6">
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="flex flex-col rounded-xl border border-neutral-300 bg-neutral-100 dark:border-border dark:bg-muted/50 min-w-70 w-70 h-[350px]"
+                />
+              ))}
+              <div className="w-6 shrink-0" />
+            </div>
           </div>
         </div>
       </div>
@@ -1117,60 +1119,116 @@ export function KanbanBoard({
   return (
     <div className="flex flex-col h-full overflow-hidden pt-0">
       {headerSlot}
-      <div
-        className="flex flex-col flex-1 min-h-0 overflow-x-auto overflow-y-auto px-6 pt-0 pb-6 items-start relative custom-scrollbar"
-        ref={scrollContainerRef}
-      >
-        {groupBy !== "None" ? (
-          <div className="flex flex-col w-full">
-            {(() => {
-              const grouped = new Map<string, Task[]>();
-              const ungrouped: Task[] = [];
-              let hasUngroupedInServer = false;
+      <div className="flex flex-col flex-1 min-h-0 pt-4">
+        <div
+          className="flex flex-col flex-1 min-h-0 overflow-x-auto overflow-y-auto items-start relative custom-scrollbar pb-4"
+          ref={scrollContainerRef}
+        >
+          {groupBy !== "None" ? (
+            <div className="flex flex-col w-full px-6">
+              {(() => {
+                const grouped = new Map<string, Task[]>();
+                const ungrouped: Task[] = [];
+                let hasUngroupedInServer = false;
 
-              // Pre-populate groups based on state before drag started to prevent them from disappearing
-              if (activeId !== null) {
-                draggingGroups.grouped.forEach((groupId) => {
-                  grouped.set(groupId, []);
-                });
-                hasUngroupedInServer = draggingGroups.hasUngrouped;
-              }
-
-              filteredTasks.forEach((t) => {
-                if (groupBy === "Assignee") {
-                  if (t.assigneeId) {
-                    if (!grouped.has(t.assigneeId))
-                      grouped.set(t.assigneeId, []);
-                    grouped.get(t.assigneeId)!.push(t);
-                  } else {
-                    ungrouped.push(t);
-                  }
-                } else if (groupBy === "Epic" || groupBy === "Subtask") {
-                  const laneId = getTaskLaneId(t, localTasks, groupBy);
-                  if (laneId) {
-                    if (!grouped.has(laneId)) grouped.set(laneId, []);
-                    grouped.get(laneId)!.push(t);
-                  } else ungrouped.push(t);
+                // Pre-populate groups based on state before drag started to prevent them from disappearing
+                if (activeId !== null) {
+                  draggingGroups.grouped.forEach((groupId) => {
+                    grouped.set(groupId, []);
+                  });
+                  hasUngroupedInServer = draggingGroups.hasUngrouped;
                 }
-              });
 
-              const ungroupedTitle =
-                groupBy === "Assignee"
-                  ? "Unassigned"
-                  : groupBy === "Epic"
-                    ? "No Epic"
-                    : "Everything else";
+                filteredTasks.forEach((t) => {
+                  if (groupBy === "Assignee") {
+                    if (t.assigneeId) {
+                      if (!grouped.has(t.assigneeId))
+                        grouped.set(t.assigneeId, []);
+                      grouped.get(t.assigneeId)!.push(t);
+                    } else {
+                      ungrouped.push(t);
+                    }
+                  } else if (groupBy === "Epic" || groupBy === "Subtask") {
+                    const laneId = getTaskLaneId(t, localTasks, groupBy);
+                    if (laneId) {
+                      if (!grouped.has(laneId)) grouped.set(laneId, []);
+                      grouped.get(laneId)!.push(t);
+                    } else ungrouped.push(t);
+                  }
+                });
 
-              return (
-                <>
-                  {Array.from(grouped.entries()).map(([groupId, tasks]) => {
-                    if (groupBy === "Assignee") {
-                      const user = users.find((u) => u.id === groupId);
+                const ungroupedTitle =
+                  groupBy === "Assignee"
+                    ? "Unassigned"
+                    : groupBy === "Epic"
+                      ? "No Epic"
+                      : "Everything else";
+
+                return (
+                  <>
+                    {Array.from(grouped.entries()).map(([groupId, tasks]) => {
+                      if (groupBy === "Assignee") {
+                        const user = users.find((u) => u.id === groupId);
+                        return (
+                          <SwimlaneGroup
+                            key={groupId}
+                            title={user?.name || groupId}
+                            avatarUserName={user?.name}
+                            taskCount={tasks.length}
+                          >
+                            {columns.map((col, index) => {
+                              const columnTasks = tasks.filter(
+                                (t) => t.status === col.id,
+                              );
+                              return (
+                                <BoardColumn
+                                  {...getColumnManagementProps(
+                                    col,
+                                    `${col.id}___${groupId}`,
+                                  )}
+                                  key={`${col.id}___${groupId}`}
+                                  columnId={col.id}
+                                  droppableId={`${col.id}___${groupId}`}
+                                  groupId={groupId}
+                                  title={col.title}
+                                  tasks={columnTasks}
+                                  onTaskClick={setSelectedTask}
+                                  onTaskUpdate={
+                                    canUpdateWorkItems
+                                      ? handleCardUpdate
+                                      : undefined
+                                  }
+                                  onTaskDelete={
+                                    canDeleteWorkItems
+                                      ? handleDelete
+                                      : undefined
+                                  }
+                                  isFirstColumn={index === 0}
+                                  onCreateTask={
+                                    canCreateWorkItems
+                                      ? (data) =>
+                                          handleCreate(data, {
+                                            assigneeId: groupId,
+                                          })
+                                      : undefined
+                                  }
+                                />
+                              );
+                            })}
+                          </SwimlaneGroup>
+                        );
+                      }
+
+                      const parentTask = serverTasks.find(
+                        (pt) => pt.id === groupId,
+                      );
+
                       return (
                         <SwimlaneGroup
                           key={groupId}
-                          title={user?.name || groupId}
-                          avatarUserName={user?.name}
+                          title={parentTask?.title || groupId}
+                          parentTask={parentTask}
+                          onParentTaskClick={setSelectedTask}
                           taskCount={tasks.length}
                         >
                           {columns.map((col, index) => {
@@ -1203,7 +1261,7 @@ export function KanbanBoard({
                                   canCreateWorkItems
                                     ? (data) =>
                                         handleCreate(data, {
-                                          assigneeId: groupId,
+                                          parentId: groupId,
                                         })
                                     : undefined
                                 }
@@ -1212,34 +1270,29 @@ export function KanbanBoard({
                           })}
                         </SwimlaneGroup>
                       );
-                    }
-
-                    const parentTask = serverTasks.find(
-                      (pt) => pt.id === groupId,
-                    );
-
-                    return (
+                    })}
+                    {(ungrouped.length > 0 ||
+                      hasUngroupedInServer ||
+                      grouped.size === 0) && (
                       <SwimlaneGroup
-                        key={groupId}
-                        title={parentTask?.title || groupId}
-                        parentTask={parentTask}
-                        onParentTaskClick={setSelectedTask}
-                        taskCount={tasks.length}
+                        title={ungroupedTitle}
+                        taskCount={ungrouped.length}
+                        isFallbackGroup={true}
                       >
                         {columns.map((col, index) => {
-                          const columnTasks = tasks.filter(
+                          const columnTasks = ungrouped.filter(
                             (t) => t.status === col.id,
                           );
                           return (
                             <BoardColumn
                               {...getColumnManagementProps(
                                 col,
-                                `${col.id}___${groupId}`,
+                                `${col.id}___ungrouped`,
                               )}
-                              key={`${col.id}___${groupId}`}
+                              key={`${col.id}___ungrouped`}
                               columnId={col.id}
-                              droppableId={`${col.id}___${groupId}`}
-                              groupId={groupId}
+                              droppableId={`${col.id}___ungrouped`}
+                              groupId="ungrouped"
                               title={col.title}
                               tasks={columnTasks}
                               onTaskClick={setSelectedTask}
@@ -1253,117 +1306,76 @@ export function KanbanBoard({
                               }
                               isFirstColumn={index === 0}
                               onCreateTask={
-                                canCreateWorkItems
-                                  ? (data) =>
-                                      handleCreate(data, { parentId: groupId })
-                                  : undefined
+                                canCreateWorkItems ? handleCreate : undefined
                               }
                             />
                           );
                         })}
                       </SwimlaneGroup>
-                    );
-                  })}
-                  {(ungrouped.length > 0 ||
-                    hasUngroupedInServer ||
-                    grouped.size === 0) && (
-                    <SwimlaneGroup
-                      title={ungroupedTitle}
-                      taskCount={ungrouped.length}
-                      isFallbackGroup={true}
-                    >
-                      {columns.map((col, index) => {
-                        const columnTasks = ungrouped.filter(
-                          (t) => t.status === col.id,
-                        );
-                        return (
-                          <BoardColumn
-                            {...getColumnManagementProps(
-                              col,
-                              `${col.id}___ungrouped`,
-                            )}
-                            key={`${col.id}___ungrouped`}
-                            columnId={col.id}
-                            droppableId={`${col.id}___ungrouped`}
-                            groupId="ungrouped"
-                            title={col.title}
-                            tasks={columnTasks}
-                            onTaskClick={setSelectedTask}
-                            onTaskUpdate={
-                              canUpdateWorkItems ? handleCardUpdate : undefined
-                            }
-                            onTaskDelete={
-                              canDeleteWorkItems ? handleDelete : undefined
-                            }
-                            isFirstColumn={index === 0}
-                            onCreateTask={
-                              canCreateWorkItems ? handleCreate : undefined
-                            }
-                          />
-                        );
-                      })}
-                    </SwimlaneGroup>
-                  )}
-                </>
-              );
-            })()}
-          </div>
-        ) : (
-          <div className="flex h-fit max-h-full min-h-0">
-            {columns.map((col, index) => {
-              const columnTasks = filteredTasks.filter(
-                (t) => t.status === col.id,
-              );
-              return (
-                <BoardColumn
-                  {...getColumnManagementProps(col, col.id)}
-                  key={col.id}
-                  columnId={col.id}
-                  droppableId={col.id}
-                  title={col.title}
-                  tasks={columnTasks}
-                  onTaskClick={setSelectedTask}
-                  onTaskUpdate={
-                    canUpdateWorkItems ? handleCardUpdate : undefined
-                  }
-                  onTaskDelete={canDeleteWorkItems ? handleDelete : undefined}
-                  isFirstColumn={index === 0}
-                  onCreateTask={canCreateWorkItems ? handleCreate : undefined}
-                />
-              );
-            })}
-            <div className="w-70 shrink-0">
-              {canManageWorkflow &&
-                (isAddingColumn ? (
-                  <input
-                    autoFocus
-                    value={newColumnTitle}
-                    onChange={(event) => setNewColumnTitle(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void handleAddColumn();
-                      if (event.key === "Escape") {
-                        setNewColumnTitle("");
-                        setIsAddingColumn(false);
-                      }
-                    }}
-                    onBlur={() => {
-                      if (!newColumnTitle.trim()) setIsAddingColumn(false);
-                    }}
-                    placeholder="Column name"
-                    className="h-10 w-full rounded-lg border border-primary bg-muted/50 px-3 text-sm font-medium outline-none ring-2 ring-primary/20 placeholder:text-muted-foreground"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setIsAddingColumn(true)}
-                    className="flex h-10 w-full items-center gap-2 rounded-lg border border-dashed px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    <Plus className="h-4 w-4" /> Add column
-                  </button>
-                ))}
+                    )}
+                  </>
+                );
+              })()}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="flex h-fit max-h-full min-h-0 px-6">
+              {columns.map((col, index) => {
+                const columnTasks = filteredTasks.filter(
+                  (t) => t.status === col.id,
+                );
+                return (
+                  <BoardColumn
+                    {...getColumnManagementProps(col, col.id)}
+                    key={col.id}
+                    columnId={col.id}
+                    droppableId={col.id}
+                    title={col.title}
+                    tasks={columnTasks}
+                    onTaskClick={setSelectedTask}
+                    onTaskUpdate={
+                      canUpdateWorkItems ? handleCardUpdate : undefined
+                    }
+                    onTaskDelete={canDeleteWorkItems ? handleDelete : undefined}
+                    isFirstColumn={index === 0}
+                    onCreateTask={canCreateWorkItems ? handleCreate : undefined}
+                  />
+                );
+              })}
+              <div className="w-70 shrink-0">
+                {canManageWorkflow &&
+                  (isAddingColumn ? (
+                    <input
+                      autoFocus
+                      value={newColumnTitle}
+                      onChange={(event) =>
+                        setNewColumnTitle(event.target.value)
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") void handleAddColumn();
+                        if (event.key === "Escape") {
+                          setNewColumnTitle("");
+                          setIsAddingColumn(false);
+                        }
+                      }}
+                      onBlur={() => {
+                        if (!newColumnTitle.trim()) setIsAddingColumn(false);
+                      }}
+                      placeholder="Column name"
+                      className="h-10 w-full rounded-lg border border-primary bg-muted/50 px-3 text-sm font-medium outline-none ring-2 ring-primary/20 placeholder:text-muted-foreground"
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingColumn(true)}
+                      className="flex h-10 w-full items-center gap-2 rounded-lg border border-dashed px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      <Plus className="h-4 w-4" /> Add column
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <TaskDetailModal

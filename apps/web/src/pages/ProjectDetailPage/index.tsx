@@ -51,6 +51,7 @@ import {
   getUserInitials,
 } from "@/features/auth/model/userAvatar";
 import {
+  ProjectSummary,
   useProject,
   useRemoveProjectMember,
   useUpdateProject,
@@ -195,7 +196,7 @@ export default function ProjectDetailPage() {
 
   const toolbarNode =
     activeTab === "board" || activeTab === "list" ? (
-      <div className="px-6 py-2 bg-background shrink-0">
+      <div className="px-6 py-0 bg-background shrink-0">
         <div className="overflow-hidden w-full flex-1">
           <BoardToolbar
             searchQuery={currentFilters.searchQuery}
@@ -490,36 +491,14 @@ export default function ProjectDetailPage() {
       <div className="flex-1 overflow-hidden relative">
         <TabsContent
           value="summary"
-          className="h-full overflow-y-auto px-6 md:px-8 pb-6 md:pb-8 pt-6 m-0"
+          className="h-full overflow-y-auto pl-6 pr-4 pb-4 pt-4 m-0"
         >
-          <div className="bg-card text-card-foreground p-6 rounded-lg border shadow-sm">
-            <h3 className="text-lg font-semibold mb-2">Summary</h3>
-            <p className="text-muted-foreground mb-6">{project.description}</p>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col">
-                <span className="text-sm font-medium text-muted-foreground">
-                  Timeline
-                </span>
-                <span className="text-sm">
-                  {project.startDate} to {project.endDate}
-                </span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-sm font-medium text-muted-foreground">
-                  Team Size
-                </span>
-                <span className="text-sm">
-                  {project.memberIds.length} members
-                </span>
-              </div>
-            </div>
-          </div>
+          <ProjectSummary project={project} />
         </TabsContent>
 
         <TabsContent
           value="list"
-          className="h-full m-0 p-0 flex flex-col data-[state=active]:flex"
+          className="h-full m-0 p-0 pt-4 flex flex-col data-[state=active]:flex"
         >
           <ListView
             projectId={project.id}
@@ -540,7 +519,7 @@ export default function ProjectDetailPage() {
 
         <TabsContent
           value="board"
-          className="h-full m-0 p-0 flex flex-col data-[state=active]:flex pt-0"
+          className="h-full m-0 p-0 pt-4 flex flex-col data-[state=active]:flex"
         >
           <KanbanBoard
             projectId={project.id}

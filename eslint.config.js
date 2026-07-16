@@ -9,7 +9,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default defineConfig([
-  globalIgnores(["dist", "apps/api"]),
+  globalIgnores(["dist", "apps/api", "apps/web/storybook-static"]),
   {
     files: ["**/*.{ts,tsx}"],
     extends: [
