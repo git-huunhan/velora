@@ -26,7 +26,8 @@ interface ApiActivity {
   from: string | null;
   fromUser?: ApiUserSummary | null;
   id: string;
-  taskId: string;
+  projectId: string;
+  taskId: string | null;
   to: string | null;
   toUser?: ApiUserSummary | null;
 }
@@ -78,6 +79,7 @@ function toActivity(activity: ApiActivity): ActivityEntry {
     from: activity.from ?? "",
     fromUser: activity.fromUser ? toUser(activity.fromUser) : null,
     id: activity.id,
+    projectId: activity.projectId,
     taskId: activity.taskId,
     to: activity.to ?? "",
     toUser: activity.toUser ? toUser(activity.toUser) : null,

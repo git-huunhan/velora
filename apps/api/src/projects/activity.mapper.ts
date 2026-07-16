@@ -15,6 +15,7 @@ export function toActivityResponse(
     from: activity.from,
     fromUser: snapshots.fromUser ? toUserSummary(snapshots.fromUser) : null,
     id: activity.id,
+    projectId: activity.projectId,
     taskId: activity.taskId,
     to: activity.to,
     toUser: snapshots.toUser ? toUserSummary(snapshots.toUser) : null,

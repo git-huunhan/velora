@@ -590,6 +590,7 @@ export function TaskActivity({
       field: "created",
       from: "",
       id: `created-${task.id}`,
+      projectId: task.projectId,
       taskId: task.id,
       to: task.code || task.title,
     };

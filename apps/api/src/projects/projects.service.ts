@@ -1,4 +1,4 @@
-﻿import { randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -282,9 +282,20 @@ export class ProjectsService {
       projectId,
       ProjectPermission.DELETE_PROJECT,
     );
-    const archived = await this.prisma.project.update({
-      where: { id: projectId },
-      data: { archivedAt: new Date() },
+    const archived = await this.prisma.$transaction(async (transaction) => {
+      const updatedProject = await transaction.project.update({
+        where: { id: projectId },
+        data: { archivedAt: new Date() },
+      });
+      await this.createActivity(transaction, {
+        actorId: userId,
+        field: 'project.archived',
+        from: null,
+        projectId,
+        taskId: null,
+        to: updatedProject.name,
+      });
+      return updatedProject;
     });
     this.emitProjectEvent('project.updated', userId, projectId, {
       action: 'archived',
@@ -302,9 +313,20 @@ export class ProjectsService {
       projectId,
       ProjectPermission.DELETE_PROJECT,
     );
-    const unarchived = await this.prisma.project.update({
-      where: { id: projectId },
-      data: { archivedAt: null },
+    const unarchived = await this.prisma.$transaction(async (transaction) => {
+      const updatedProject = await transaction.project.update({
+        where: { id: projectId },
+        data: { archivedAt: null },
+      });
+      await this.createActivity(transaction, {
+        actorId: userId,
+        field: 'project.restored',
+        from: null,
+        projectId,
+        taskId: null,
+        to: updatedProject.name,
+      });
+      return updatedProject;
     });
     this.emitProjectEvent('project.updated', userId, projectId, {
       action: 'unarchived',
@@ -367,20 +389,31 @@ export class ProjectsService {
       throw new ConflictException('This user is already a project member.');
     }
 
-    const [project, member] = await this.prisma.$transaction([
-      this.prisma.project.findUniqueOrThrow({
-        where: { id: projectId },
-        select: { id: true, key: true, name: true },
-      }),
-      this.prisma.projectMember.create({
-        data: {
+    const { member, project } = await this.prisma.$transaction(
+      async (transaction) => {
+        const project = await transaction.project.findUniqueOrThrow({
+          where: { id: projectId },
+          select: { id: true, key: true, name: true },
+        });
+        const member = await transaction.projectMember.create({
+          data: {
+            projectId,
+            role: roleToPrisma[input.role],
+            userId: input.userId,
+          },
+          include: { user: true },
+        });
+        await this.createActivity(transaction, {
+          actorId: userId,
+          field: 'member.added',
+          from: null,
           projectId,
-          role: roleToPrisma[input.role],
-          userId: input.userId,
-        },
-        include: { user: true },
-      }),
-    ]);
+          taskId: null,
+          to: `${member.user.displayName}:${member.role}`,
+        });
+        return { member, project };
+      },
+    );
 
     await this.notifyProjectMemberAdded(userId, input.userId, project);
     this.emitProjectEvent('project.member_added', userId, projectId, {
@@ -402,7 +435,10 @@ export class ProjectsService {
       projectId,
       ProjectPermission.MANAGE_MEMBERS,
     );
-    const member = await this.getProjectMemberOrThrow(projectId, memberUserId);
+    const member = await this.prisma.projectMember.findUniqueOrThrow({
+      where: { projectId_userId: { projectId, userId: memberUserId } },
+      include: { user: true },
+    });
     if (
       member.role === ProjectRole.OWNER &&
       roleToPrisma[input.role] !== ProjectRole.OWNER
@@ -410,11 +446,24 @@ export class ProjectsService {
       await this.assertProjectKeepsOwner(projectId);
     }
 
-    const updatedMember = await this.prisma.projectMember.update({
-      where: { projectId_userId: { projectId, userId: memberUserId } },
-      data: { role: roleToPrisma[input.role] },
-      include: { user: true },
-    });
+    const updatedMember = await this.prisma.$transaction(
+      async (transaction) => {
+        const updatedMember = await transaction.projectMember.update({
+          where: { projectId_userId: { projectId, userId: memberUserId } },
+          data: { role: roleToPrisma[input.role] },
+          include: { user: true },
+        });
+        await this.createActivity(transaction, {
+          actorId: userId,
+          field: 'member.role',
+          from: `${member.user.displayName}:${member.role}`,
+          projectId,
+          taskId: null,
+          to: `${updatedMember.user.displayName}:${updatedMember.role}`,
+        });
+        return updatedMember;
+      },
+    );
     this.emitProjectEvent('project.member_added', userId, projectId, {
       action: 'role_updated',
       memberUserId,
@@ -433,7 +482,10 @@ export class ProjectsService {
       projectId,
       ProjectPermission.MANAGE_MEMBERS,
     );
-    const member = await this.getProjectMemberOrThrow(projectId, memberUserId);
+    const member = await this.prisma.projectMember.findUniqueOrThrow({
+      where: { projectId_userId: { projectId, userId: memberUserId } },
+      include: { user: true },
+    });
     if (member.role === ProjectRole.OWNER) {
       await this.assertProjectKeepsOwner(projectId);
     }
@@ -454,6 +506,7 @@ export class ProjectsService {
             actorId: userId,
             field: 'assigneeId',
             from: memberUserId,
+            projectId,
             taskId: task.id,
             to: null,
           })),
@@ -466,6 +519,14 @@ export class ProjectsService {
 
       await transaction.projectMember.delete({
         where: { projectId_userId: { projectId, userId: memberUserId } },
+      });
+      await this.createActivity(transaction, {
+        actorId: userId,
+        field: 'member.removed',
+        from: member.user.displayName,
+        projectId,
+        taskId: null,
+        to: member.role,
       });
     });
 
@@ -509,14 +570,27 @@ export class ProjectsService {
       where: { projectId },
     });
     try {
-      const createdColumn = await this.prisma.kanbanColumn.create({
-        data: {
-          isDone: input.isDone ?? false,
-          name,
-          projectId,
-          rank: columnRankAt(count),
+      const createdColumn = await this.prisma.$transaction(
+        async (transaction) => {
+          const createdColumn = await transaction.kanbanColumn.create({
+            data: {
+              isDone: input.isDone ?? false,
+              name,
+              projectId,
+              rank: columnRankAt(count),
+            },
+          });
+          await this.createActivity(transaction, {
+            actorId: userId,
+            field: 'column.created',
+            from: null,
+            projectId,
+            taskId: null,
+            to: createdColumn.name,
+          });
+          return createdColumn;
         },
-      });
+      );
       this.emitProjectEvent('project.updated', userId, projectId, {
         action: 'column_created',
         columnId: createdColumn.id,
@@ -545,13 +619,30 @@ export class ProjectsService {
     await this.getKanbanColumnOrThrow(projectId, columnId);
 
     try {
-      const updatedColumn = await this.prisma.kanbanColumn.update({
-        where: { id: columnId },
-        data: {
-          ...(input.name !== undefined ? { name: input.name.trim() } : {}),
-          ...(input.isDone !== undefined ? { isDone: input.isDone } : {}),
+      const previousColumn = await this.getKanbanColumnOrThrow(
+        projectId,
+        columnId,
+      );
+      const updatedColumn = await this.prisma.$transaction(
+        async (transaction) => {
+          const updatedColumn = await transaction.kanbanColumn.update({
+            where: { id: columnId },
+            data: {
+              ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+              ...(input.isDone !== undefined ? { isDone: input.isDone } : {}),
+            },
+          });
+          await this.createActivity(transaction, {
+            actorId: userId,
+            field: 'column.updated',
+            from: previousColumn.name,
+            projectId,
+            taskId: null,
+            to: updatedColumn.name,
+          });
+          return updatedColumn;
         },
-      });
+      );
       this.emitProjectEvent('project.updated', userId, projectId, {
         action: 'column_updated',
         columnId,
@@ -599,6 +690,7 @@ export class ProjectsService {
       throw new BadRequestException(validation.reason);
     }
 
+    const originalIndex = columns.findIndex((column) => column.id === columnId);
     const reordered = columns.filter((column) => column.id !== columnId);
     const beforeIndex = input.beforeColumnId
       ? reordered.findIndex((column) => column.id === input.beforeColumnId)
@@ -629,9 +721,18 @@ export class ProjectsService {
         });
       }
 
-      return transaction.kanbanColumn.findUniqueOrThrow({
+      const updatedColumn = await transaction.kanbanColumn.findUniqueOrThrow({
         where: { id: columnId },
       });
+      await this.createActivity(transaction, {
+        actorId: userId,
+        field: 'column.moved',
+        from: `position ${originalIndex + 1}`,
+        projectId,
+        taskId: null,
+        to: `position ${insertIndex + 1}`,
+      });
+      return updatedColumn;
     });
 
     this.emitProjectEvent('project.updated', userId, projectId, {
@@ -664,7 +765,21 @@ export class ProjectsService {
       throw new ConflictException('Move or delete tasks in this column first.');
     }
 
-    await this.prisma.kanbanColumn.delete({ where: { id: columnId } });
+    const deletedColumn = await this.getKanbanColumnOrThrow(
+      projectId,
+      columnId,
+    );
+    await this.prisma.$transaction(async (transaction) => {
+      await transaction.kanbanColumn.delete({ where: { id: columnId } });
+      await this.createActivity(transaction, {
+        actorId: userId,
+        field: 'column.deleted',
+        from: deletedColumn.name,
+        projectId,
+        taskId: null,
+        to: null,
+      });
+    });
     this.emitProjectEvent('project.updated', userId, projectId, {
       action: 'column_deleted',
       columnId,
@@ -748,6 +863,7 @@ export class ProjectsService {
         actorId: userId,
         field: 'created',
         from: null,
+        projectId,
         taskId: createdTask.id,
         to: createdTask.code,
       });
@@ -850,6 +966,7 @@ export class ProjectsService {
       await this.createActivities(
         transaction,
         userId,
+        projectId,
         taskId,
         this.collectTaskUpdateActivities(existing, updatedTask),
       );
@@ -968,6 +1085,7 @@ export class ProjectsService {
       await this.createActivities(
         transaction,
         userId,
+        projectId,
         taskId,
         this.collectTaskUpdateActivities(movingTask, movedTask),
       );
@@ -1035,6 +1153,7 @@ export class ProjectsService {
         actorId: userId,
         field: 'commented',
         from: null,
+        projectId,
         taskId,
         to: createdComment.body,
       });
@@ -1503,6 +1622,7 @@ export class ProjectsService {
   private async createActivities(
     transaction: Prisma.TransactionClient,
     actorId: string,
+    projectId: string,
     taskId: string,
     changes: ActivityChange[],
   ): Promise<void> {
@@ -1511,6 +1631,7 @@ export class ProjectsService {
         actorId,
         field: change.field,
         from: change.from,
+        projectId,
         taskId,
         to: change.to,
       });
@@ -1523,7 +1644,8 @@ export class ProjectsService {
       actorId: string;
       field: string;
       from: string | null;
-      taskId: string;
+      projectId: string;
+      taskId: string | null;
       to: string | null;
     },
   ): Promise<void> {

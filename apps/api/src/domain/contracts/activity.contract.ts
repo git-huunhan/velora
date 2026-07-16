@@ -26,7 +26,10 @@ export class ActivityResponse {
   id!: string;
 
   @ApiProperty({ format: 'uuid' })
-  taskId!: string;
+  projectId!: string;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  taskId!: string | null;
 
   @ApiProperty({ type: UserSummary })
   actor!: UserSummary;

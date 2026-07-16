@@ -1,4 +1,4 @@
-﻿import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   ConnectedSocket,
@@ -64,14 +64,14 @@ export class RealtimeGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() payload: ProjectSubscriptionPayload,
   ): Promise<RealtimeAck> {
-    if (!this.registry.getConnection(client.id)) {
+    const connection = this.registry.getConnection(client.id);
+    if (!connection) {
       return { ok: false, error: 'UNAUTHENTICATED' };
     }
     if (!this.isValidProjectId(payload?.projectId)) {
       return { ok: false, error: 'INVALID_PROJECT_ID' };
     }
 
-    const connection = this.registry.getConnection(client.id);
     const hasAccess = await this.hasProjectAccess(
       connection.userId,
       payload.projectId,

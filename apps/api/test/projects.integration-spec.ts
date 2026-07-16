@@ -184,6 +184,18 @@ describe('Projects API integration', () => {
       .expect(({ body }) => {
         expect((body as ProjectResponse).archivedAt).toBeNull();
       });
+
+    const projectActivityFields = await prisma.activity.findMany({
+      where: {
+        field: { in: ['project.archived', 'project.restored'] },
+        projectId,
+        taskId: null,
+      },
+      select: { field: true },
+    });
+    expect(projectActivityFields.map((activity) => activity.field)).toEqual(
+      expect.arrayContaining(['project.archived', 'project.restored']),
+    );
   });
 
   it('manages workflow columns for project managers', async () => {
@@ -222,11 +234,13 @@ describe('Projects API integration', () => {
     expect(updated).toMatchObject({ isDone: true, name: 'QA Blocked' });
 
     await request(server)
-      .post(`/api/v1/projects/${projectId}/columns/${updated.id}/move`)
+      .post(
+        `/api/v1/projects/${projectId}/columns/${defaultColumns[1].id}/move`,
+      )
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({
-        afterColumnId: defaultColumns[0].id,
-        expectedUpdatedAt: updated.updatedAt,
+        beforeColumnId: defaultColumns[0].id,
+        expectedUpdatedAt: defaultColumns[1].updatedAt,
       })
       .expect(200);
 
@@ -234,6 +248,35 @@ describe('Projects API integration', () => {
       .delete(`/api/v1/projects/${projectId}/columns/${updated.id}`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .expect(204);
+
+    const columnActivityFields = await prisma.activity.findMany({
+      where: {
+        field: {
+          in: [
+            'column.created',
+            'column.updated',
+            'column.moved',
+            'column.deleted',
+          ],
+        },
+        projectId,
+        taskId: null,
+      },
+      select: { field: true, from: true, to: true },
+    });
+    expect(columnActivityFields.map((activity) => activity.field)).toEqual(
+      expect.arrayContaining([
+        'column.created',
+        'column.updated',
+        'column.moved',
+        'column.deleted',
+      ]),
+    );
+    expect(
+      columnActivityFields.find(
+        (activity) => activity.field === 'column.moved',
+      ),
+    ).toMatchObject({ from: 'position 3', to: 'position 1' });
   });
 
   it('rejects duplicate keys and blocks non-members', async () => {

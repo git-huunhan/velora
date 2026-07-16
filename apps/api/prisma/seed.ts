@@ -192,6 +192,7 @@ async function seed(): Promise<void> {
     await tx.activity.create({
       data: {
         id: ids.activity,
+        projectId: ids.project,
         taskId: ids.task,
         actorId: ids.user,
         field: 'status',

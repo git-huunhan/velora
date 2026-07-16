@@ -92,7 +92,8 @@ export interface Comment {
 
 export interface ActivityEntry {
   id: string;
-  taskId: string;
+  projectId: string;
+  taskId: string | null;
   actorId: string;
   actor: {
     id: string;
