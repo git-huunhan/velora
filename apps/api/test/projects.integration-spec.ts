@@ -463,6 +463,34 @@ describe('Projects API integration', () => {
       });
 
     await request(server)
+      .get(`/api/v1/projects/${projectId}/activities`)
+      .query({ field: 'commented', limit: 2, page: 1, taskId: task.id })
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        const response = body as ActivityListResponse & {
+          meta: {
+            limit: number;
+            page: number;
+            total: number;
+            totalPages: number;
+          };
+        };
+        expect(response.meta).toMatchObject({ limit: 2, page: 1 });
+        expect(response.meta.total).toBeGreaterThanOrEqual(1);
+        expect(
+          response.data.every((activity) => activity.field === 'commented'),
+        ).toBe(true);
+        expect(
+          response.data.every((activity) => activity.taskId === task.id),
+        ).toBe(true);
+      });
+
+    await request(server)
+      .get(`/api/v1/projects/${projectId}/activities`)
+      .set('Authorization', `Bearer ${outsiderToken}`)
+      .expect(403);
+    await request(server)
       .post(`/api/v1/projects/${projectId}/tasks/${task.id}/move`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({

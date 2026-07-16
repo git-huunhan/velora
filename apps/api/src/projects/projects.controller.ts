@@ -30,7 +30,10 @@ import {
   CommentResponse,
 } from '../domain/contracts';
 import { MoveColumnDto, MoveTaskDto } from '../domain/dto/move-task.dto';
-import { ActivityListResponse } from './contracts/activity-list.contract';
+import {
+  ActivityListResponse,
+  ProjectActivityListResponse,
+} from './contracts/activity-list.contract';
 import { CommentListResponse } from './contracts/comment-list.contract';
 import { KanbanColumnListResponse } from './contracts/kanban-column-list.contract';
 import { ProjectListResponse } from './contracts/project-list.contract';
@@ -41,6 +44,7 @@ import { CreateKanbanColumnDto } from './dto/create-kanban-column.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
+import { ProjectActivityQueryDto } from './dto/project-activity-query.dto';
 import { ProjectListQueryDto } from './dto/project-list-query.dto';
 import { UpdateKanbanColumnDto } from './dto/update-kanban-column.dto';
 import { UpdateProjectMemberDto } from './dto/update-project-member.dto';
@@ -96,6 +100,20 @@ export class ProjectsController {
     return this.projectsService.updateProject(user.sub, params.id, input);
   }
 
+  @Get(':id/activities')
+  @ApiOperation({ summary: 'List project activities for audit views' })
+  @ApiOkResponse({ type: ProjectActivityListResponse })
+  listProjectActivities(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) projectId: string,
+    @Query() query: ProjectActivityQueryDto,
+  ): Promise<ProjectActivityListResponse> {
+    return this.projectsService.listProjectActivities(
+      user.sub,
+      projectId,
+      query,
+    );
+  }
   @Post(':id/archive')
   @HttpCode(200)
   @ApiOperation({ summary: 'Archive a project' })

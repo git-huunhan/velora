@@ -37,7 +37,10 @@ import {
 } from '../generated/prisma/client';
 import type { MoveColumnDto, MoveTaskDto } from '../domain/dto/move-task.dto';
 import { toActivityResponse } from './activity.mapper';
-import type { ActivityListResponse } from './contracts/activity-list.contract';
+import type {
+  ActivityListResponse,
+  ProjectActivityListResponse,
+} from './contracts/activity-list.contract';
 import type { CommentListResponse } from './contracts/comment-list.contract';
 import type { KanbanColumnListResponse } from './contracts/kanban-column-list.contract';
 import type { ProjectListResponse } from './contracts/project-list.contract';
@@ -47,6 +50,7 @@ import { toCommentResponse } from './comment.mapper';
 import type { AddProjectMemberDto } from './dto/add-project-member.dto';
 import type { CreateKanbanColumnDto } from './dto/create-kanban-column.dto';
 import type { CreateCommentDto } from './dto/create-comment.dto';
+import type { ProjectActivityQueryDto } from './dto/project-activity-query.dto';
 import type { ProjectListQueryDto } from './dto/project-list-query.dto';
 import type { UpdateKanbanColumnDto } from './dto/update-kanban-column.dto';
 import type { CreateProjectDto } from './dto/create-project.dto';
@@ -119,6 +123,10 @@ type ActivityChange = {
   from: string | null;
   to: string | null;
 };
+
+type ActivityWithActor = Prisma.ActivityGetPayload<{
+  include: { actor: true };
+}>;
 
 @Injectable()
 export class ProjectsService {
@@ -1183,39 +1191,59 @@ export class ProjectsService {
     );
     await this.getTaskOrThrow(projectId, taskId);
     const activities = await this.prisma.activity.findMany({
-      where: { taskId },
+      where: { projectId, taskId },
       include: { actor: true },
       orderBy: { createdAt: 'asc' },
     });
-    const userIdPattern =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    const referencedUserIds = Array.from(
-      new Set(
-        activities
-          .flatMap((activity) => [activity.from, activity.to])
-          .filter(
-            (value): value is string => !!value && userIdPattern.test(value),
-          ),
-      ),
-    );
-    const referencedUsers = referencedUserIds.length
-      ? await this.prisma.user.findMany({
-          where: { id: { in: referencedUserIds } },
-        })
-      : [];
-    const referencedUserById = new Map(
-      referencedUsers.map((user) => [user.id, user]),
+
+    return { data: await this.mapActivities(activities) };
+  }
+
+  async listProjectActivities(
+    userId: string,
+    projectId: string,
+    query: ProjectActivityQueryDto,
+  ): Promise<ProjectActivityListResponse> {
+    await this.assertProjectPermission(
+      userId,
+      projectId,
+      ProjectPermission.READ_PROJECT,
     );
 
+    const where: Prisma.ActivityWhereInput = {
+      projectId,
+      ...(query.taskId ? { taskId: query.taskId } : {}),
+      ...(query.actorId ? { actorId: query.actorId } : {}),
+      ...(query.field ? { field: query.field.trim() } : {}),
+      ...(query.from || query.to
+        ? {
+            createdAt: {
+              ...(query.from ? { gte: new Date(query.from) } : {}),
+              ...(query.to ? { lte: new Date(query.to) } : {}),
+            },
+          }
+        : {}),
+    };
+    const skip = (query.page - 1) * query.limit;
+    const [activities, total] = await this.prisma.$transaction([
+      this.prisma.activity.findMany({
+        where,
+        include: { actor: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip,
+        take: query.limit,
+      }),
+      this.prisma.activity.count({ where }),
+    ]);
+
     return {
-      data: activities.map((activity) =>
-        toActivityResponse(activity, {
-          fromUser: activity.from
-            ? referencedUserById.get(activity.from)
-            : undefined,
-          toUser: activity.to ? referencedUserById.get(activity.to) : undefined,
-        }),
-      ),
+      data: await this.mapActivities(activities),
+      meta: {
+        limit: query.limit,
+        page: query.page,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / query.limit)),
+      },
     };
   }
 
@@ -1638,6 +1666,36 @@ export class ProjectsService {
     }
   }
 
+  private async mapActivities(activities: ActivityWithActor[]) {
+    const userIdPattern =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const referencedUserIds = Array.from(
+      new Set(
+        activities
+          .flatMap((activity) => [activity.from, activity.to])
+          .filter(
+            (value): value is string => !!value && userIdPattern.test(value),
+          ),
+      ),
+    );
+    const referencedUsers = referencedUserIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: referencedUserIds } },
+        })
+      : [];
+    const referencedUserById = new Map(
+      referencedUsers.map((user) => [user.id, user]),
+    );
+
+    return activities.map((activity) =>
+      toActivityResponse(activity, {
+        fromUser: activity.from
+          ? referencedUserById.get(activity.from)
+          : undefined,
+        toUser: activity.to ? referencedUserById.get(activity.to) : undefined,
+      }),
+    );
+  }
   private async createActivity(
     transaction: Prisma.TransactionClient,
     data: {
