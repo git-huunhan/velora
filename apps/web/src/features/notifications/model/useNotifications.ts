@@ -1,7 +1,8 @@
-﻿import { useEffect } from "react";
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { connectRealtimeSocket } from "@/shared/api/realtime";
+import { retryApiRequest } from "@/shared/api/retry";
 
 import {
   getNotifications,
@@ -33,7 +34,7 @@ export function useNotifications(
 ) {
   return useQuery({
     queryKey: notificationKeys.list({ limit, page, unread }),
-    queryFn: () => getNotifications(page, limit, unread),
+    queryFn: () => retryApiRequest(() => getNotifications(page, limit, unread)),
     refetchInterval: 30_000,
   });
 }
@@ -41,7 +42,7 @@ export function useNotifications(
 export function useUnreadNotificationCount() {
   return useQuery({
     queryKey: notificationKeys.count(),
-    queryFn: getUnreadNotificationCount,
+    queryFn: () => retryApiRequest(getUnreadNotificationCount),
     refetchInterval: 30_000,
   });
 }

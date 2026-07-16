@@ -3,10 +3,12 @@ import { createBrowserRouter } from "react-router-dom";
 import { Layout } from "@/widgets/Layout";
 
 import { ProtectedRoute } from "@/features/auth";
+import { RouteErrorBoundary } from "./RouteErrorBoundary";
 
 export const router = createBrowserRouter([
   {
     element: <ProtectedRoute />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         element: <Layout />,
@@ -47,6 +49,7 @@ export const router = createBrowserRouter([
   },
   {
     path: "/login",
+    errorElement: <RouteErrorBoundary />,
     lazy: async () => ({
       Component: (await import("@/pages/LoginPage")).default,
     }),

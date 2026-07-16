@@ -3,7 +3,7 @@ import { toast } from "sonner";
 
 import { useAuth } from "@/features/auth/model/useAuth";
 import { getUserAvatarUrl } from "@/features/auth/model/userAvatar";
-import { ApiError } from "@/shared/api/client";
+import { getApiErrorToastCopy } from "@/shared/api/errorCopy";
 
 import type { ActivityEntry, Comment } from "../model/types";
 import {
@@ -66,14 +66,8 @@ export function useCreateComment(taskId: string) {
 
     onError: (err, _body, ctx) => {
       qc.setQueryData(commentKeys.byTask(taskId), ctx?.previous ?? []);
-      toast.error("Comment was not posted", {
-        description:
-          err instanceof ApiError && err.status === 403
-            ? "You do not have permission to comment on this task."
-            : err instanceof Error
-              ? err.message
-              : "Please try again.",
-      });
+      const copy = getApiErrorToastCopy(err, "Comment was not posted");
+      toast.error(copy.title, { description: copy.description });
     },
 
     onSuccess: () => {
@@ -110,11 +104,12 @@ export function useUpdateComment(taskId: string) {
       return { previous };
     },
 
-    onError: (_err, _vars, ctx) => {
+    onError: (err, _vars, ctx) => {
       if (ctx?.previous) {
         qc.setQueryData(commentKeys.byTask(taskId), ctx.previous);
       }
-      toast.error("Failed to update comment");
+      const copy = getApiErrorToastCopy(err, "Failed to update comment");
+      toast.error(copy.title, { description: copy.description });
     },
 
     onSuccess: () => {
@@ -140,11 +135,12 @@ export function useDeleteComment(taskId: string) {
       return { previous };
     },
 
-    onError: (_err, _id, ctx) => {
+    onError: (err, _id, ctx) => {
       if (ctx?.previous) {
         qc.setQueryData(commentKeys.byTask(taskId), ctx.previous);
       }
-      toast.error("Failed to delete comment");
+      const copy = getApiErrorToastCopy(err, "Failed to delete comment");
+      toast.error(copy.title, { description: copy.description });
     },
 
     onSuccess: () => {
