@@ -20,6 +20,7 @@ import {
 } from "@/features/auth/model/userAvatar";
 import type { ProjectCapabilities } from "@/features/projects/model/types";
 import { useUsers } from "@/features/users/model/useUsers";
+import { getApiErrorToastCopy } from "@/shared/api/errorCopy";
 
 import {
   useCreateTask,
@@ -747,9 +748,13 @@ export function KanbanBoard({
             },
           },
           {
-            onError: () => {
+            onError: (error) => {
               setLocalTasks(previousLocalTasksRef.current);
-              toast.error("Failed to save task position");
+              const copy = getApiErrorToastCopy(
+                error,
+                "Failed to save task position",
+              );
+              toast.error(copy.title, { description: copy.description });
             },
             onSettled: () => {
               setIsDropPersisting(false);
@@ -760,9 +765,10 @@ export function KanbanBoard({
         updateTask.mutate(
           { taskId: updatedTask.id, data: dataToUpdate },
           {
-            onError: () => {
+            onError: (error) => {
               setLocalTasks(previousLocalTasksRef.current);
-              toast.error("Failed to update task");
+              const copy = getApiErrorToastCopy(error, "Failed to update task");
+              toast.error(copy.title, { description: copy.description });
             },
             onSettled: () => {
               setIsDropPersisting(false);
@@ -961,7 +967,13 @@ export function KanbanBoard({
         const insertionIndex = side === "after" ? targetIndex + 1 : targetIndex;
         ids.splice(insertionIndex, 0, movedColumnId);
         reorderColumns.mutate(ids, {
-          onError: () => toast.error("Failed to reorder columns"),
+          onError: (error) => {
+            const copy = getApiErrorToastCopy(
+              error,
+              "Failed to reorder columns",
+            );
+            toast.error(copy.title, { description: copy.description });
+          },
         });
         setDraggedColumnId(null);
         setColumnDropIndicator(null);
@@ -998,7 +1010,10 @@ export function KanbanBoard({
           setEditingTask(null);
           toast.success("Task updated");
         },
-        onError: () => toast.error("Failed to update task"),
+        onError: (error) => {
+          const copy = getApiErrorToastCopy(error, "Failed to update task");
+          toast.error(copy.title, { description: copy.description });
+        },
       },
     );
   };
@@ -1015,7 +1030,10 @@ export function KanbanBoard({
           setSelectedTask(null);
           toast.success("Task deleted");
         },
-        onError: () => toast.error("Failed to delete task"),
+        onError: (error) => {
+          const copy = getApiErrorToastCopy(error, "Failed to delete task");
+          toast.error(copy.title, { description: copy.description });
+        },
       },
     );
   };
@@ -1029,7 +1047,10 @@ export function KanbanBoard({
       updateTask.mutate(
         { taskId, data },
         {
-          onError: () => toast.error("Failed to update task"),
+          onError: (error) => {
+            const copy = getApiErrorToastCopy(error, "Failed to update task");
+            toast.error(copy.title, { description: copy.description });
+          },
         },
       );
     },

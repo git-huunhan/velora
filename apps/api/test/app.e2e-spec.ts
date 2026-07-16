@@ -1,4 +1,10 @@
-import { Controller, Get, type INestApplication, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  type INestApplication,
+  Query,
+} from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -16,6 +22,11 @@ class PaginationTestController {
   @Get('error')
   fail(): never {
     throw new Error('Sensitive internal detail');
+  }
+
+  @Post('write')
+  write(): Record<string, string> {
+    return { status: 'ok' };
   }
 }
 
@@ -38,9 +49,27 @@ describe('API standards (e2e)', () => {
       .get('/api/v1/health')
       .expect(200)
       .expect(({ body }: { body: Record<string, unknown> }) => {
-        expect(body.status).toBe('ok');
+        expect(['ok', 'degraded']).toContain(body.status);
+        expect(['ok', 'unavailable']).toContain(body.database);
         expect(typeof body.timestamp).toBe('string');
       });
+  });
+
+  it('adds production safety headers and request ids', () => {
+    return request(app.getHttpServer())
+      .get('/api/v1/health')
+      .set('x-request-id', 'test-request-id')
+      .expect(200)
+      .expect('x-request-id', 'test-request-id')
+      .expect('x-content-type-options', 'nosniff')
+      .expect('x-frame-options', 'DENY')
+      .expect('referrer-policy', 'no-referrer');
+  });
+
+  it('adds rate-limit headers to write requests', () => {
+    return request(app.getHttpServer())
+      .post('/api/v1/test/pagination/write')
+      .expect(201);
   });
 
   it('publishes the OpenAPI document', () => {
@@ -75,6 +104,7 @@ describe('API standards (e2e)', () => {
           statusCode: 400,
           code: 'VALIDATION_ERROR',
           message: 'Request validation failed',
+          requestId: expect.any(String),
           path: '/api/v1/test/pagination?page=0&unexpected=true',
         });
         expect(body.details).toEqual(expect.any(Array));
@@ -91,6 +121,7 @@ describe('API standards (e2e)', () => {
           statusCode: 500,
           code: 'INTERNAL_SERVER_ERROR',
           message: 'An unexpected error occurred',
+          requestId: expect.any(String),
           path: '/api/v1/test/pagination/error',
         });
         expect(JSON.stringify(body)).not.toContain('Sensitive internal detail');

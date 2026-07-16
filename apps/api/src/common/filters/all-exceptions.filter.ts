@@ -14,6 +14,11 @@ interface NestErrorBody {
   message?: string | string[];
 }
 
+interface HttpRequestWithRequestId {
+  headers: Record<string, string | string[] | undefined>;
+  requestId?: string;
+}
+
 const BAD_REQUEST_STATUS = 400;
 const INTERNAL_SERVER_ERROR_STATUS = 500;
 
@@ -31,14 +36,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? exception.getStatus()
         : Number(HttpStatus.INTERNAL_SERVER_ERROR);
     const exceptionBody = this.getExceptionBody(exception);
-    const path = httpAdapter.getRequestUrl(
-      context.getRequest<unknown>(),
-    ) as string;
+    const request = context.getRequest<HttpRequestWithRequestId>();
+    const path = httpAdapter.getRequestUrl(request) as string;
+    const requestId = this.getRequestId(request);
     const responseBody: ApiErrorResponse = {
       statusCode,
       code: this.getErrorCode(statusCode, exceptionBody),
       message: this.getMessage(statusCode, exceptionBody),
       timestamp: new Date().toISOString(),
+      requestId,
       path,
     };
 
@@ -47,10 +53,22 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     if (!(exception instanceof HttpException)) {
-      this.logger.error('Unhandled exception', exception);
+      this.logger.error(
+        `Unhandled exception requestId=${requestId ?? 'unknown'} path=${path}`,
+        exception,
+      );
     }
 
     httpAdapter.reply(context.getResponse(), responseBody, statusCode);
+  }
+
+  private getRequestId(request: HttpRequestWithRequestId): string | undefined {
+    const header = request.headers['x-request-id'];
+    if (typeof header === 'string' && header.trim()) {
+      return header;
+    }
+
+    return request.requestId;
   }
 
   private getExceptionBody(exception: unknown): NestErrorBody {

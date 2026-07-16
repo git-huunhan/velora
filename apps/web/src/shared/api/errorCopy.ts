@@ -51,6 +51,13 @@ export function getApiErrorToastCopy(
     };
   }
 
+  if (error.status === 429) {
+    return {
+      title: "Too many actions",
+      description: getApiErrorMessage(error),
+    };
+  }
+
   return {
     title: fallbackTitle,
     description: getApiErrorMessage(error),

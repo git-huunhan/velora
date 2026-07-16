@@ -38,7 +38,7 @@
 
 ## Storybook, Design System & Case Study
 
-Velora includes a Storybook workspace for reviewing the product UI as a design system and portfolio case study. It documents reusable components, theme behavior, interaction states, and case-study narratives that help recruiters understand both the product thinking and the implementation quality.
+Velora includes a Storybook workspace for reviewing the product UI as a design system and portfolio case study. It documents reusable components, theme behavior, interaction states, and case-study narratives for product and engineering review.
 
 ```bash
 npm run storybook
@@ -109,7 +109,7 @@ npm run lint:api        # Lint apps/api
 npm run build:api       # Build apps/api
 npm run docs:check      # Check documentation encoding/format guardrails
 npm run db:migrate      # Run Prisma migrations for the API
-npm run db:seed         # Seed local API data
+npm run db:seed         # Seed focused local demo data
 ```
 
 ---
